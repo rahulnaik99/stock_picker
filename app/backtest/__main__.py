@@ -24,21 +24,23 @@ from app.backtest.scores import indicator_score_asof
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m app.backtest", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--symbols", required=True, help="comma-separated NSE symbols, e.g. CANBK,SBIN,PNB")
+    p.add_argument("--symbols", default="", help="comma-separated NSE symbols. Default: a ~28-name mixed-financials basket")
     p.add_argument("--start", required=True, help="history start (YYYY-MM-DD)")
     p.add_argument("--end", required=True, help="history end (YYYY-MM-DD)")
     p.add_argument("--rebalance", default="W", help="rebalance frequency: D, W, ME, Q (pandas freq). Default W")
     p.add_argument("--horizons", default="5,21,63", help="forward horizons in trading days. Default 5,21,63")
     p.add_argument("--buckets", type=int, default=5, help="number of score buckets for the cross-section. Default 5")
     p.add_argument("--min-names", type=int, default=5, help="min symbols per date for cross-sectional IC. Default 5")
-    p.add_argument("--trades", action="store_true", help="also run the Trader trade-level backtest (entry/stop/target/size)")
-    p.add_argument("--capital", type=float, default=100000.0, help="capital for position sizing in the trade backtest")
-    p.add_argument("--risk-pct", type=float, default=1.0, help="risk %% of capital per trade (stop-out loss)")
+    p.add_argument("--trades", action="store_true", help="also run the realistic Trader trade/portfolio backtest")
+    p.add_argument("--capital", type=float, default=100000.0, help="starting capital for the portfolio sim")
+    p.add_argument("--risk-pct", type=float, default=1.0, help="risk %% of CURRENT equity per trade")
+    p.add_argument("--entry-mode", choices=["market", "limit"], default="market", help="trade entry fill model")
     p.add_argument("--hold-cap", type=int, default=63, help="max bars to hold a simulated trade before closing at market")
+    p.add_argument("--no-short", action="store_true", help="long-only trade backtest")
     p.add_argument("--out", default="output/backtest", help="output path prefix (writes .md and .csv)")
     a = p.parse_args(argv)
 
-    symbols = [s.strip().upper() for s in a.symbols.split(",") if s.strip()]
+    symbols = [s.strip().upper() for s in a.symbols.split(",") if s.strip()] or list(btdata.DEFAULT_UNIVERSE)
     horizons = [int(h) for h in a.horizons.split(",") if h.strip()]
 
     print(f"Loading daily candles for {len(symbols)} symbols {a.start}..{a.end} from Yahoo ...")
@@ -71,9 +73,10 @@ def main(argv: list[str] | None = None) -> int:
     if a.trades:
         from app.backtest import trades as bttrades
 
-        trs = bttrades.run_trade_backtest(panel, dates, capital=a.capital, risk_pct=a.risk_pct, max_bars=a.hold_cap)
-        tsum = bttrades.summarize_trades(trs)
-        tmd = bttrades.trades_to_markdown(tsum, a.capital, a.risk_pct)
+        trs = bttrades.run_trade_portfolio(panel, dates, capital=a.capital, risk_pct=a.risk_pct, max_bars=a.hold_cap,
+                                           entry_mode=a.entry_mode, allow_short=not a.no_short)
+        tsum = bttrades.summarize_portfolio(trs, a.capital)
+        tmd = bttrades.portfolio_to_markdown(tsum, a.risk_pct, a.entry_mode)
         tmd_path = out.with_name(out.stem + "_trades").with_suffix(".md")
         tcsv_path = out.with_name(out.stem + "_trades").with_suffix(".csv")
         tmd_path.write_text(tmd)
@@ -85,14 +88,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def _write_trades_csv(recs: list[dict], path: Path) -> None:
     import csv
-    cols = ["date", "symbol", "bias", "entry", "stop_loss", "target", "quantity", "risk_reward",
-            "outcome", "exit_price", "bars_held", "pnl_per_share", "pnl", "r_multiple"]
+    cols = ["entry_date", "exit_date", "symbol", "bias", "entry", "stop_loss", "target", "quantity", "notional",
+            "risk_reward", "outcome", "exit_price", "bars_held", "pnl_per_share", "pnl", "r_multiple"]
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
-        for r in sorted(recs, key=lambda x: (x["date"], x["symbol"])):
-            w.writerow({c: r.get(c) for c in cols})
+        for r in sorted(recs, key=lambda x: (x["entry_date"], x["symbol"])):
+            w.writerow({c: (r.get(c).date() if hasattr(r.get(c), "date") else r.get(c)) for c in cols})
 
 
 if __name__ == "__main__":

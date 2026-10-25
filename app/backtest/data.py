@@ -12,6 +12,16 @@ import pandas as pd
 
 from app.mcp_server.tools.common import clean_symbol, yahoo_symbol
 
+# A liquid, diversified NSE financials basket for the backtest default (private + PSU banks, NBFCs / financiers,
+# insurers, AMC / market-infra) - a real cross-section, not six correlated PSU banks.
+DEFAULT_UNIVERSE = [
+    "HDFCBANK", "ICICIBANK", "AXISBANK", "KOTAKBANK", "INDUSINDBK", "FEDERALBNK", "IDFCFIRSTB",
+    "SBIN", "BANKBARODA", "PNB", "CANBK", "UNIONBANK",
+    "BAJFINANCE", "BAJAJFINSV", "CHOLAFIN", "SHRIRAMFIN", "MUTHOOTFIN", "SBICARD", "PFC", "RECLTD", "LICHSGFIN",
+    "HDFCLIFE", "SBILIFE", "ICICIGI", "ICICIPRULI",
+    "HDFCAMC", "BSE", "CDSL",
+]
+
 
 def load_yahoo_daily(symbols: Sequence[str], start: str, end: str) -> dict[str, pd.DataFrame]:
     """Return {symbol -> DataFrame[time, open, high, low, close, volume]} (ascending, adjusted) for each symbol
