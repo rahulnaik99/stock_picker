@@ -124,7 +124,7 @@ class StubLLM:
             }
         else:
             body = {
-                "score": float(score), "confidence": 0.5, "reasoning": f"stub reasoning for {self.spec.agent}",
+                "score_adjustment": 0.0, "score": float(score), "confidence": 0.5, "reasoning": f"stub reasoning for {self.spec.agent}",
                 "evidence": [], "missing_data": [], "extra": {},
             }
         return _Msg(json.dumps(body))

@@ -108,6 +108,8 @@ def finalize(*, run_id: str, symbol: str, meta: dict[str, Any], as_of: str, resu
         risks.append(f"LLM score {proposed} differs from policy score {score} by {gap}: review")
     if policy["unavailable"]:
         risks.append("unavailable inputs: " + ", ".join(policy["unavailable"]))
+    from app.scoring import validators  # local import avoids any import-order surprises
+    risks += [f"validation: {flag}" for flag in validators.run_validations(results)]
     retrieved = [s["retrieved_at"] for r in results.values() for s in r.sources if s.get("retrieved_at") and s.get("status") == "ok"]
     summary = (decision.reasoning if decision else "") or "; ".join(f"{k}: {r.reasoning[:80]}" for k, r in results.items() if r.status == "ok")
     return StockResult(

@@ -54,8 +54,9 @@ Each specialist follows the same contract (`app/Agents/base.py::analyze`):
 
 1. Call its allow-listed tools → evidence.
 2. If there is **no usable evidence**, return status `unavailable` — the LLM is *not* asked to guess.
-3. The LLM reads `prompt.md` + evidence and returns JSON (validated against `LLMScoreOutput`, one retry on bad JSON).
-4. Code applies hard rules (score clamp to `[-10,10]`, caps, confidence normalisation) and builds an `AgentResult`.
+3. Code computes a **deterministic baseline score** from the evidence (`app/scoring/baselines.py`): earnings growth/streak/margin (fundamental), the indicator `rule_score`, sector momentum + VIX (industry), promoter-stake + FII/DII direction (trend), the price/OI quadrant + PCR (option).
+4. The LLM reads `prompt.md` + evidence + the baseline and returns a **bounded `score_adjustment`** (±`MAX_ADJUST`, default 2) plus classifications (validated against `LLMAdjustOutput`, one retry on bad JSON). It classifies and nudges; it does not invent an absolute number.
+5. The final agent score = `clamp(baseline + clamp(adjustment, ±MAX_ADJUST), -10, 10)`; `extra` records `baseline_score` and `score_adjustment` for audit. This is more reproducible than asking a model for a calibrated scalar and keeps "LLMs interpret, Python decides" true of the number itself. (A legacy absolute-`score` path remains for callers that pass no baseline.)
 
 This design is provider-agnostic: no provider-specific tool-calling or structured-output features are required, so the
 same code runs on local Ollama/OLMX models and hosted OpenAI models.
@@ -95,6 +96,17 @@ in their own `TOOLS` allow-list (enforced by `app/mcp_server/client.py`).
   consensus, enough data, score ≥ `min_final_score_for_entry`, and a non-extended setup, else it is downgraded with the
   reason recorded. Bearish consensus forces `AVOID`.
 - LLM-proposed score vs the computed score: a gap beyond `score_discrepancy_threshold` is added to `risk_flags`.
+
+### Validation layer (`app/scoring/validators.py`)
+
+A deterministic post-analysis pass (no LLM) that turns silent data problems into explicit flags:
+- **results-freshness**: if a `results` filing is materially newer than the latest quarter in the numeric series, it
+  flags that the newer quarter's actuals are missing. The Fundamental agent injects this warning into its evidence
+  *before* the LLM call, so it cannot narrate the just-filed quarter using older series figures.
+- **per-agent consistency**: status/score coherence, confidence range, and "strong score with no evidence."
+
+Flags are passed to the Decision Maker as `policy.validation_flags` (it must not let a flagged input raise the
+verdict) and are appended to the final `risk_flags`.
 
 ---
 

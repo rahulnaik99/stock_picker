@@ -1,6 +1,8 @@
-"""Market data: candles (FYERS first, Yahoo fallback) and the FYERS option chain.
+"""Market data: candles and the option chain, both from FYERS v3 (official `fyers-apiv3` SDK).
 
-Provider is recorded on every result. Providers are never mixed inside one series.
+FYERS is the SINGLE source of market data. If FYERS is unreachable or the token is invalid, the tool returns an
+error and the dependent agent becomes unavailable — there is deliberately NO fallback provider, because FYERS is
+the reliable source and a silent substitute would be misleading.
 """
 from __future__ import annotations
 
@@ -11,21 +13,17 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pandas as pd
-import requests
 
-from app.mcp_server.tools.common import (IST, SourceError, clean_symbol, error, fyers_symbol, http_get, now_ist,
-                                         ok, parse_as_of, unavailable, yahoo_symbol)
+from app.mcp_server.tools.common import (IST, SourceError, clean_symbol, error, fyers_symbol, now_ist,
+                                         ok, parse_as_of, unavailable)
 from app.service.logger import get_logger
 from app.service.settings import get_settings
 from app.store.db import connect, kv_get, kv_set, mark_refreshed, refreshed_today
 
 log = get_logger(__name__)
-FYERS_HISTORY_URL = "https://api-t1.fyers.in/data/history"
-FYERS_OPTION_CHAIN_URL = "https://api-t1.fyers.in/data/options-chain-v3"
 # FYERS: daily history <= 366 days per call, intraday <= 100 days per call.
 _throttle_lock = threading.Lock()
 _last_call = 0.0
-_fyers_auth_warning_emitted = False
 
 
 def _throttle(min_interval: float = 0.25) -> None:
@@ -42,29 +40,34 @@ _RES = {"D": ("D", 366), "60": ("60", 100), "15": ("15", 100)}
 
 
 # ------------------------------------------------------------------ candles
-def _fyers_candles(symbol: str, resolution: str, start: datetime, end: datetime, session: requests.Session | None = None) -> pd.DataFrame:
+def _fyers_client():
+    """Official FYERS v3 SDK client (lazy import: the package is only needed when FYERS is actually called)."""
     s = get_settings()
     if not (s.fyers_app_id and s.fyers_access_token):
         raise SourceError("FYERS_APP_ID / FYERS_ACCESS_TOKEN not set")
-    sess = session or requests.Session()
+    try:
+        from fyers_apiv3 import fyersModel
+    except ImportError as exc:
+        raise SourceError("fyers-apiv3 not installed (pip install fyers-apiv3)") from exc
+    return fyersModel.FyersModel(client_id=s.fyers_app_id, token=s.fyers_access_token, is_async=False, log_path="")
+
+
+def _fyers_candles(symbol: str, resolution: str, start: datetime, end: datetime) -> pd.DataFrame:
+    fy = _fyers_client()
     res, max_days = _RES[resolution]
-    headers = {"Authorization": f"{s.fyers_app_id}:{s.fyers_access_token}"}
     rows: list[list[float]] = []
     cursor = start.date()
     while cursor <= end.date():
         chunk_end = min(end.date(), cursor + timedelta(days=max_days - 1))
         _throttle()
-        resp = http_get(sess, FYERS_HISTORY_URL, headers=headers, params={
-            "symbol": fyers_symbol(symbol), "resolution": res, "date_format": "1",
-            "range_from": cursor.isoformat(), "range_to": chunk_end.isoformat(), "cont_flag": "1"})
-        if resp.status_code in (401, 403):
-            raise SourceError(f"FYERS authentication failed (HTTP {resp.status_code}: {resp.text[:200]}). "
-                              "Token expired/invalid? Regenerate it with: python -m scripts.fyers_login")
-        payload = resp.json()
-        if payload.get("s") == "no_data":
+        payload = fy.history(data={"symbol": fyers_symbol(symbol), "resolution": res, "date_format": "1",
+                                   "range_from": cursor.isoformat(), "range_to": chunk_end.isoformat(), "cont_flag": "1"}) or {}
+        status = payload.get("s")
+        if status == "no_data":
             pass
-        elif payload.get("s") != "ok":
-            raise SourceError(f"FYERS error: {payload.get('message') or payload}")
+        elif status != "ok":
+            raise SourceError(f"FYERS history {clean_symbol(symbol)} {res}: {payload.get('message') or payload.get('code') or payload}. "
+                              "FYERS is the only market-data source (no fallback); check the token with: python -m scripts.fyers_login")
         rows.extend(payload.get("candles") or [])
         cursor = chunk_end + timedelta(days=1)
     if not rows:
@@ -74,42 +77,13 @@ def _fyers_candles(symbol: str, resolution: str, start: datetime, end: datetime,
     return df.drop(columns="ts").drop_duplicates("time").sort_values("time").reset_index(drop=True)
 
 
-def _yahoo_candles(symbol: str, resolution: str, start: datetime, end: datetime) -> pd.DataFrame:
-    import yfinance as yf
-
-    interval = {"D": "1d", "60": "60m", "15": "15m"}[resolution]
-    df = yf.download(yahoo_symbol(symbol), start=start.date().isoformat(), end=(end.date() + timedelta(days=1)).isoformat(),
-                     interval=interval, auto_adjust=False, progress=False, multi_level_index=False)
-    if df is None or df.empty:
-        return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume"])
-    df = df.reset_index()
-    tcol = df.columns[0]
-    t = pd.to_datetime(df[tcol])
-    t = t.dt.tz_localize(IST) if t.dt.tz is None else t.dt.tz_convert(IST)
-    return pd.DataFrame({"time": t, "open": df["Open"], "high": df["High"], "low": df["Low"],
-                         "close": df["Close"], "volume": df["Volume"]}).reset_index(drop=True)
-
-
 def fetch_candles(symbol: str, resolution: str, days: int, as_of: str | None = None) -> tuple[pd.DataFrame, str]:
-    """Return (candles, provider). Drops the still-forming bar. FYERS first, Yahoo if FYERS is unusable."""
+    """Return (candles, 'fyers'). Drops the still-forming bar. FYERS is the SINGLE source of market data: if it is
+    unreachable or the token is invalid we ABORT (raise) rather than substitute a less reliable provider."""
     end = parse_as_of(as_of)
     start = end - timedelta(days=days)
     provider = "fyers"
-    try:
-        df = _fyers_candles(symbol, resolution, start, end)
-    except (SourceError, ValueError, requests.RequestException) as exc:
-        global _fyers_auth_warning_emitted
-        if "authentication failed" in str(exc).lower():
-            if not _fyers_auth_warning_emitted:
-                log.warning("FYERS auth failed, using Yahoo fallback (further auth warnings suppressed). Reason: %s", exc)
-                log.warning("Regenerate the daily FYERS token with: python -m scripts.fyers_login")
-                _fyers_auth_warning_emitted = True
-            else:
-                log.debug("FYERS authentication failed for %s; using Yahoo fallback", symbol)
-        else:
-            log.warning("FYERS candles failed for %s (%s); falling back to Yahoo", symbol, exc)
-        provider = "yfinance"
-        df = _yahoo_candles(symbol, resolution, start, end)
+    df = _fyers_candles(symbol, resolution, start, end)
     if df.empty:
         return df, provider
     df = df[df["time"] <= end]
@@ -239,14 +213,11 @@ def get_option_chain(symbol: str, strikecount: int = 10, as_of: str | None = Non
             return ok(src, cached["summary"], symbol=sym, cache="hit", captured_at=cached["captured_at"],
                       note="Cached from the first load today (refresh-once-a-day rule); use --force-refresh for a live re-pull.")
         _throttle()
-        resp = http_get(requests.Session(), FYERS_OPTION_CHAIN_URL, headers={"Authorization": f"{s.fyers_app_id}:{s.fyers_access_token}"},
-                        params={"symbol": fyers_symbol(symbol), "strikecount": str(strikecount)})
-        if resp.status_code in (401, 403):
-            return error(src, f"FYERS authentication failed (HTTP {resp.status_code}: {resp.text[:200]}). "
-                              "Token expired/invalid? Regenerate it with: python -m scripts.fyers_login")
-        payload = resp.json()
+        fy = _fyers_client()
+        payload = fy.optionchain(data={"symbol": fyers_symbol(symbol), "strikecount": strikecount, "timestamp": "", "greeks": "1"}) or {}
         if payload.get("s") != "ok":
-            return unavailable(src, f"no option chain: {payload.get('message') or payload.get('code')}")
+            return error(src, f"FYERS option chain {sym}: {payload.get('message') or payload.get('code') or payload}. "
+                              "FYERS is the only source (no fallback); check the token with: python -m scripts.fyers_login")
         summary = summarize_chain(payload, t)
         summary["windows"] = _window_changes(symbol, summary["total_call_oi"], summary["total_put_oi"], t)
         stamp = now_ist().isoformat(timespec="seconds")

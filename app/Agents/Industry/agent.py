@@ -14,6 +14,7 @@ from app.Agents.base import analyze, compact, load_prompt, unavailable_result
 from app.mcp_server.client import AgentTools
 from app.mcp_server.tools.common import parse_as_of
 from app.schemas import AgentResult
+from app.scoring import baselines
 from app.service.logger import get_logger
 from app.service.settings import ROOT, get_settings
 from app.store.db import kv_get, kv_set
@@ -49,8 +50,10 @@ async def _compute(tools: AgentTools, as_of: str | None) -> AgentResult:
         return unavailable_result(NAME, SCOPE, results, "No sector, rates, macro or news data could be retrieved.")
     evidence = {k: compact(v, 12) for k, v in results.items()}
     evidence["tool_status"] = {k: v["status"] for k, v in results.items()}
+    macro = results["macro_snapshot"]["data"] if results["macro_snapshot"]["status"] == "ok" else []
+    base_score, _parts = baselines.industry_baseline(macro)
     return await analyze(agent=NAME, llm_key=NAME, symbol=SCOPE, system_prompt=load_prompt(__file__, sector_focus=CFG["focus"]),
-                         evidence=evidence, tool_results=results, context={"scope": SCOPE, "as_of": as_of})
+                         evidence=evidence, tool_results=results, context={"scope": SCOPE, "as_of": as_of}, baseline=base_score)
 
 
 async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str | None) -> AgentResult:

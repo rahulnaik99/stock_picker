@@ -25,6 +25,24 @@ class LLMScoreOutput(BaseModel):
         return v / 100 if isinstance(v, (int, float)) and v > 1 else v
 
 
+class LLMAdjustOutput(BaseModel):
+    """Baseline mode: Python computes a deterministic baseline from the evidence and the LLM returns a bounded
+    ADJUSTMENT to it (plus classifications), instead of inventing an absolute score. `score` is tolerated for models
+    that still emit an absolute number; code converts it to an adjustment."""
+    score_adjustment: float | None = None
+    score: float | None = None
+    confidence: float = Field(0.5, ge=0, le=1)
+    reasoning: str
+    evidence: list[Any] = Field(default_factory=list)
+    missing_data: list[str] = Field(default_factory=list)
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _conf(cls, v: Any) -> Any:
+        return v / 100 if isinstance(v, (int, float)) and v > 1 else v
+
+
 class AgentResult(BaseModel):
     agent: str
     symbol: str

@@ -12,17 +12,17 @@ The chain covers the nearest expiry and strikes around spot only.
 - Rising call OI or put OI alone is NOT a signal. Read OI change together with price change and volume:
   price up + OI up = fresh long build-up; price up + OI down = short covering; price down + OI up = fresh shorts; price down + OI down = long unwinding.
 - Large put OI at a strike often acts as support and large call OI as resistance, but could also be hedging. Say "may".
-- PCR extremes are context, not a prediction. State the number and its limits.
+- PCR = put OI / call OI. PCR > 1 = put-heavy (more puts than calls); PCR < 1 = call-heavy (more calls than puts). Do NOT describe a low PCR (<1) as "more put writing". PCR extremes are context, not a prediction; state the number and its limits.
 - `insufficient_history` means unknown: put it in `missing_data`, do not treat it as zero change.
-- Score scale (-10..+10): +8..+10 extremely bullish positioning, +4..+7 bullish, +1..+3 mildly bullish, 0 neutral, -1..-3 mildly bearish, -4..-7 bearish, -8..-10 extremely bearish.
+- Scoring: `baseline.score` is a code-computed score from the price/OI quadrant + PCR tilt. You return `score_adjustment` in [-2, +2] for nuance (strike-level clustering, volume divergence); the final score = baseline + your adjustment, on -10..+10 (+ bullish positioning, - bearish).
 - Keep confidence modest (<= 0.6) unless several independent clues agree.
 
 # Output: return ONLY this JSON object
 ```json
 {
-  "score": 2.0,
+  "score_adjustment": 0.0,
   "confidence": 0.5,
-  "reasoning": "2-4 sentences using the actual numbers.",
+  "reasoning": "2-4 sentences using the actual numbers; say why you kept or nudged the baseline.",
   "evidence": [{"claim": "PCR 1.18; put OI +4.2% today, price +1.1%"}],
   "missing_data": ["1w/1m OI change history"],
   "extra": {

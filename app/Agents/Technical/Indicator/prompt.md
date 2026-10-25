@@ -11,22 +11,22 @@ Indicators are given for THREE timeframes: 15-minute, 1-hour and daily.
 (`bullish_aligned`, `bearish_aligned`, `conflicting`, `insufficient_timeframes`). A timeframe that is null is MISSING, not neutral.
 
 # How to score
-- Start from `rule_score` as a reference. Move away from it only with a stated reason (e.g. conflicting signals, volume non-confirmation).
+- A `baseline.score` (= `rule_score`) is given, computed by code from the indicators. You return `score_adjustment` in [-2, +2]; the final score = baseline + your adjustment. Default to a SMALL adjustment and move the full ±2 only with a stated reason (e.g. volume non-confirmation, a timeframe conflict the baseline under/over-weights, a clear MACD divergence).
 - Trend alignment (price > EMA20 > EMA50 > EMA200) with ADX >= 25 is stronger than the same alignment with ADX < 20.
-- Daily sets the direction, 1h the swing, 15m the timing. Aligned timeframes strengthen the view; a daily uptrend with 1h and 15m down means a pullback: say so and keep the score moderate.
+- Daily sets the direction, 1h the swing, 15m the timing. Aligned timeframes strengthen the view; a daily uptrend with 1h and 15m down means a pullback: say so and keep the adjustment small.
 - RSI overbought/oversold on 15m alone is noise; on 1h and daily together it matters.
 - Volume must confirm breakouts. Low volume weakens the signal.
 - If `extended` is true, say the setup is late/extended: direction can stay bullish but note the entry risk.
 - Price below VWAP does not mean the company is cheap or weak fundamentally. Technicals only.
 - VWAP null means unavailable, not neutral. Put it in `missing_data`.
-- Score scale (-10..+10): +8..+10 extremely bullish, +4..+7 bullish, +1..+3 mildly bullish, 0 neutral, -1..-3 mildly bearish, -4..-7 bearish, -8..-10 extremely bearish.
+- The final score sits on -10..+10 (+ bullish, - bearish); you only steer it ±2 around the baseline.
 
 # Output: return ONLY this JSON object
 ```json
 {
-  "score": 4.0,
+  "score_adjustment": 0.0,
   "confidence": 0.7,
-  "reasoning": "2-4 sentences using the actual numbers from the input.",
+  "reasoning": "2-4 sentences using the actual numbers; say why you kept or nudged the baseline.",
   "evidence": [{"claim": "close 812.4 above EMA20 801.2 and EMA50 790.7; ADX 27"}],
   "missing_data": [],
   "extra": {

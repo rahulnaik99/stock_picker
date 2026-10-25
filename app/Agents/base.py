@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.schemas import AgentResult, LLMScoreOutput
+from app.schemas import AgentResult, LLMAdjustOutput, LLMScoreOutput
 from app.service.logger import get_logger, log_event, save_trace, timed
 from app.service.models.llm_factory import get_llm
 from app.service.models.telemetry import invoke_with_telemetry
@@ -24,6 +24,7 @@ from app.service.models.telemetry import invoke_with_telemetry
 log = get_logger(__name__)
 MAX_EVIDENCE_CHARS = 14000
 MAX_CONTEXT_STORED = 60000
+MAX_ADJUST = 2.0   # in baseline mode the LLM may nudge the code-computed baseline by at most +/- this
 
 
 def load_prompt(agent_file: str, **placeholders: str) -> str:
@@ -127,11 +128,23 @@ def unavailable_result(agent: str, symbol: str, tool_results: dict[str, dict[str
 
 
 async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, evidence: dict[str, Any],
-                  tool_results: dict[str, dict[str, Any]], context: dict[str, Any]) -> AgentResult:
-    """Ask the agent's configured LLM to score the evidence. Returns a validated AgentResult (never raises)."""
+                  tool_results: dict[str, dict[str, Any]], context: dict[str, Any],
+                  baseline: float | None = None, max_adjust: float = MAX_ADJUST) -> AgentResult:
+    """Ask the agent's configured LLM to judge the evidence. Returns a validated AgentResult (never raises).
+
+    Two modes:
+    - baseline is None (legacy): the LLM returns an absolute `score` in [-10, 10].
+    - baseline is a number: Python has already computed a deterministic baseline; the LLM returns a bounded
+      `score_adjustment` and the final score = clamp(baseline + clamp(adjustment, +/-max_adjust))."""
     llm, spec = get_llm(llm_key)
-    user = _serialize_evidence_payload({"stock": context, "evidence": evidence}, MAX_EVIDENCE_CHARS * 2)
+    payload: dict[str, Any] = {"stock": context, "evidence": evidence}
+    if baseline is not None:
+        payload["baseline"] = {"score": round(baseline, 2), "max_adjustment": max_adjust,
+                               "note": "Code computed this score from the evidence. Return score_adjustment in "
+                                       f"[-{max_adjust}, +{max_adjust}]; the final score = baseline + your adjustment."}
+    user = _serialize_evidence_payload(payload, MAX_EVIDENCE_CHARS * 2)
     messages = [("system", system_prompt), ("user", user)]
+    schema = LLMAdjustOutput if baseline is not None else LLMScoreOutput
     raw, parsed, last_err = "", None, ""
     tok_in = tok_out = 0
     with timed() as t:
@@ -141,7 +154,7 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
                 ti, to = getattr(resp, "_ekx_tokens", (0, 0))
                 tok_in, tok_out = tok_in + (ti or 0), tok_out + (to or 0)
                 raw = resp.content if isinstance(resp.content, str) else json.dumps(resp.content)
-                parsed = LLMScoreOutput(**extract_json(raw))
+                parsed = schema(**extract_json(raw))
                 break
             except (ValueError, ValidationError, json.JSONDecodeError) as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
@@ -163,6 +176,22 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
     if parsed is None:
         return AgentResult(**base, status="error", reasoning=f"LLM output unusable: {last_err[:300]}")
     note = ""
+    if baseline is not None:
+        # Prefer an explicit adjustment; tolerate a model that returned an absolute score by converting it.
+        if parsed.score_adjustment is not None:
+            raw_adj = float(parsed.score_adjustment)
+        elif parsed.score is not None:
+            raw_adj = float(parsed.score) - baseline
+        else:
+            raw_adj = 0.0
+        adj = max(-max_adjust, min(max_adjust, raw_adj))
+        if abs(raw_adj - adj) > 1e-9:
+            note = f"adjustment {round(raw_adj, 2)} clamped to +/-{max_adjust}"
+        score = max(-10.0, min(10.0, baseline + adj))
+        extra = dict(parsed.extra or {})
+        extra.update({"baseline_score": round(baseline, 2), "score_adjustment": round(adj, 2)})
+        return AgentResult(**base, status="ok", score=round(score, 2), confidence=parsed.confidence, reasoning=parsed.reasoning,
+                           evidence=parsed.evidence, missing_data=parsed.missing_data, extra=extra, note=note)
     score = parsed.score
     if not -10 <= score <= 10:
         note = f"score {score} clamped to [-10, 10]"

@@ -8,6 +8,7 @@ from app.ledger.events import EventLedger
 from app.mcp_server.client import AgentTools
 from app.mcp_server.tools.common import parse_as_of
 from app.schemas import AgentResult
+from app.scoring import baselines, validators
 
 NAME = "fundamental"
 TOOLS = ["nse_company_events", "quarterly_fundamentals", "yf_fundamentals", "news_search"]
@@ -41,6 +42,10 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     if not events and qres["status"] != "ok" and fund["status"] != "ok" and news["status"] != "ok":
         return unavailable_result(NAME, symbol, results, "No NSE events, quarterly results, fundamentals or news could be retrieved.")
 
+    # Guard against mislabelling: if a results filing is newer than the latest quarter in the numeric series,
+    # tell the model that quarter's actuals are missing (prevents attaching Jun figures to a just-filed Sep quarter).
+    freshness = validators.results_freshness(events, qres.get("latest_period") if qres["status"] == "ok" else None)
+
     evidence = {
         # Cap to the most recent events and drop the long source_url/published_at (kept in the ledger for the UI);
         # the model cites event_id, not the URL. This keeps the prompt within small local-model context windows.
@@ -51,9 +56,16 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         "yf_fundamentals": _ratios_only(fund), "news": compact(news, 6),
         "tool_status": {k: v["status"] for k, v in results.items()},
     }
+    if freshness:
+        evidence["data_freshness"] = {"warning": freshness}
+    metrics_block = (qres.get("data") or {}).get("metrics") if qres["status"] == "ok" else None
+    base_score, _parts = baselines.fundamental_baseline(metrics_block, meta.get("sub_sector"))
     res = await analyze(agent=NAME, llm_key=NAME, symbol=symbol, system_prompt=load_prompt(__file__, sub_sector=meta.get("sub_sector", "")),
-                        evidence=evidence, tool_results=results, context={**meta, "as_of": as_of})
+                        evidence=evidence, tool_results=results, context={**meta, "as_of": as_of}, baseline=base_score)
     if res.status == "ok":
+        if freshness:
+            res.extra["data_freshness_flag"] = freshness
+            res.missing_data.append("latest filed quarter not yet in the numeric series (see data_freshness)")
         ledger.update_impacts((res.extra or {}).get("events", []) or [])
         if nse["status"] != "ok":
             res.missing_data.append("nse_company_events (official filings not retrieved)")

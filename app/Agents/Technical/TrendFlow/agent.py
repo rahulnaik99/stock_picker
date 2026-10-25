@@ -6,6 +6,7 @@ from typing import Any
 from app.Agents.base import analyze, load_prompt, unavailable_result
 from app.mcp_server.client import AgentTools
 from app.schemas import AgentResult
+from app.scoring import baselines
 
 NAME = "investment_trend"
 TOOLS = ["nse_fii_dii", "nse_deals", "nse_shareholding"]
@@ -28,8 +29,10 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         return unavailable_result(NAME, symbol, results, "No FII/DII, deal or shareholding evidence could be retrieved.")
     evidence = {k: v for k, v in results.items()}
     evidence["evidence_level"] = level
+    sh = results["nse_shareholding"]["data"] if results["nse_shareholding"]["status"] == "ok" else None
+    base_score, _parts = baselines.trend_baseline(results["nse_fii_dii"], sh, level)
     res = await analyze(agent=NAME, llm_key="trend_flow", symbol=symbol, system_prompt=load_prompt(__file__), evidence=evidence,
-                        tool_results=results, context={**meta, "as_of": as_of})
+                        tool_results=results, context={**meta, "as_of": as_of}, baseline=base_score)
     if res.status == "ok":
         res.extra["evidence_level"] = level
         if level == "market_wide_only" and res.score is not None and abs(res.score) > MARKET_WIDE_ONLY_CAP:

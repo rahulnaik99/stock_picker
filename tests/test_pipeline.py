@@ -76,8 +76,9 @@ def test_analyze_survives_provider_exception(monkeypatch):
 
 
 # ---- investment trend rules ----------------------------------------------------------------------
-def test_market_wide_only_score_is_capped(monkeypatch):
-    patch_llm(monkeypatch, ScriptedLLM(['{"score": 9, "reasoning": "FIIs buying"}']))
+def test_market_wide_only_adjustment_is_bounded(monkeypatch):
+    # Baseline mode: an over-eager LLM adjustment is clamped to +/-2, and market-wide-only stays within +/-3.
+    patch_llm(monkeypatch, ScriptedLLM(['{"score_adjustment": 9, "reasoning": "FIIs buying"}']))
     tools = ToolClient("inprocess").for_agent(trend.TOOLS)
     t = fake_tools()
     t["nse_deals"] = lambda symbol, days=30, as_of=None: unavailable("fake", "x")
@@ -85,7 +86,8 @@ def test_market_wide_only_score_is_capped(monkeypatch):
     import app.mcp_server.client as c
     monkeypatch.setattr(c, "TOOLS", registry.TOOLS)
     r = asyncio.run(trend.run("SBIN", {}, tools, "2026-10-20"))
-    assert r.score == 3.0 and r.extra["evidence_level"] == "market_wide_only" and "capped" in r.note
+    assert r.extra["evidence_level"] == "market_wide_only"
+    assert -3.0 <= r.score <= 3.0 and "clamped" in r.note
 
 
 def test_no_flow_evidence_is_unavailable_without_calling_llm(monkeypatch):

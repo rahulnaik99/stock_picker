@@ -108,7 +108,7 @@ SOURCES_CATALOG.md             every stock, shared URLs, what to fetch per sub-s
 ## Tools (all on the shared MCP server)
 | Tool | Source | Used by |
 |---|---|---|
-| `get_technical_indicators`, `get_candles` | FYERS v3 (Yahoo fallback) | Indicator |
+| `get_technical_indicators`, `get_candles` | FYERS v3 (official `fyers-apiv3` SDK; no fallback) | Indicator |
 | `get_option_chain` | FYERS option chain (+ own weekly/monthly OI snapshots) | OptionChain |
 | `nse_company_events` | NSE announcements, board meetings, corporate actions | Fundamental |
 | `yf_fundamentals` | Yahoo Finance | Fundamental |
@@ -135,7 +135,7 @@ Each agent can call only the tools in its own `TOOLS` list. Every tool returns `
 ## Known limits (verify on your machine)
 - NSE endpoints are unofficial and bot-protected: if blocked, set `NSE_COOKIES` from your browser. Failed feeds show as `unavailable`/`error`, never as neutral.
 - RBI repo rate is not on a stable machine-readable endpoint: keep `config/policy_rates.json` current (shipped as `null`, which the Industry agent reports as "not verified").
-- FYERS option-chain field names follow the v3 response shape and are covered by a fixture test, but have not been run against the live API from here. **FYERS access tokens expire daily** — regenerate with `python -m scripts.fyers_login` (needs `FYERS_APP_ID`, `FYERS_SECRET_ID`, `FYERS_REDIRECT_URI` in `.env`); pasting an old token will fail with an auth error, after which candles fall back to Yahoo automatically.
+- Market data (candles + option chain) comes **only** from FYERS v3 via the official `fyers-apiv3` SDK — there is no fallback provider. **FYERS access tokens expire daily** — regenerate with `python -m scripts.fyers_login` (needs `FYERS_APP_ID`, `FYERS_SECRET_ID`, `FYERS_REDIRECT_URI` in `.env`). If the token is invalid/expired, the Indicator and Option-Chain tools return an error and those agents report unavailable (by design — no silent substitute). FYERS option-chain field names follow the v3 response shape and are covered by a fixture test but have not been run against the live API from here.
 - Weekly/monthly OI change needs saved daily snapshots, so it is empty until the app has run on several days.
 - Yahoo fundamentals are a current snapshot (not point-in-time); bank NIM/NPA must come from filings.
 - Initial weights and thresholds are hypotheses: validate with a walk-forward backtest before trusting rank for trading.

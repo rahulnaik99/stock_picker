@@ -19,6 +19,7 @@ from app.ledger.events import EventLedger
 from app.mcp_server.client import ToolClient
 from app.schemas import AgentResult, StockResult
 from app.scoring import policy
+from app.scoring import validators
 from app.service import progress
 from app.service.logger import get_logger, log_context
 
@@ -75,7 +76,9 @@ def build_graph(client: ToolClient, cfg: dict[str, Any], ledger: EventLedger | N
     async def decision_node(state: StockState):
         with log_context(agent="decision_maker"):
             pol = policy.compute_policy(state["results"], cfg)
-            log.info("policy: score=%s consensus=%s data=%s completeness=%s", pol["policy_score"], pol["consensus_status"], pol["data_status"], pol["data_completeness"])
+            pol["validation_flags"] = validators.run_validations(state["results"])
+            log.info("policy: score=%s consensus=%s data=%s completeness=%s flags=%d", pol["policy_score"], pol["consensus_status"],
+                     pol["data_status"], pol["data_completeness"], len(pol["validation_flags"]))
             if pol["consensus_status"] == "INSUFFICIENT_DATA":
                 progress.agent_finish("decision_maker", status="skipped", error="insufficient data: nothing to reconcile")
                 return {"decision": None}  # nothing to reconcile; the data gate decides

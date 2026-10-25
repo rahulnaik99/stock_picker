@@ -10,6 +10,7 @@ pandas>=2.2,<3.1
 numpy>=1.26
 openpyxl>=3.1
 yfinance>=0.2.40
+fyers-apiv3>=3.1          # official FYERS v3 SDK (candles + option chain); market data has no fallback
 feedparser>=6.0
 filelock>=3.13
 pytest>=8

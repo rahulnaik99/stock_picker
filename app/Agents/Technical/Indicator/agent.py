@@ -18,7 +18,7 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         return unavailable_result(NAME, symbol, results, ind.get("message") or "indicators unavailable")
     data = ind["data"]
     res = await analyze(agent=NAME, llm_key=NAME, symbol=symbol, system_prompt=load_prompt(__file__), evidence={"indicators": data},
-                        tool_results=results, context={**meta, "as_of": as_of})
+                        tool_results=results, context={**meta, "as_of": as_of}, baseline=data["rule_score"])
     if res.status == "ok":
         # Hard facts from code win over anything the LLM says.
         res.extra.update({"extended": data["extended"], "rule_score": data["rule_score"], "levels": {
@@ -26,6 +26,4 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
             "candle_provider": data.get("candle_provider")})
         if data.get("vwap_session") is None:
             res.missing_data.append("session VWAP (no intraday volume)")
-        if abs(res.score - data["rule_score"]) > 4:
-            res.note = (res.note + f" LLM score {res.score} differs from rule_score {data['rule_score']} by >4").strip()
     return res

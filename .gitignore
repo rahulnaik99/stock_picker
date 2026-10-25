@@ -1,17 +1,10 @@
-# Secrets & local config
 .env
-
-# Python
 __pycache__/
 *.py[cod]
 .venv/
 *.egg-info/
 .pytest_cache/
-
-# Generated data / logs / outputs
 data/
 logs/
 output/
-
-# OS
 .DS_Store
