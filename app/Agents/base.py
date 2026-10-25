@@ -151,6 +151,10 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
             except Exception as exc:  # noqa: BLE001 - network/auth/etc from the provider
                 last_err = f"{type(exc).__name__}: {exc}"
                 log.error("%s LLM call failed (%s/%s): %s", agent, spec.provider, spec.model, last_err[:300])
+                if any(w in last_err.lower() for w in ("context size", "context length", "length limit", "num_ctx")):
+                    log.error("%s hit the model's context limit. Raise it on the Ollama SERVER (per-call num_ctx is ignored by "
+                              "Ollama's /v1 endpoint): build a Modelfile with `PARAMETER num_ctx 16384` (see app/config/ollama/) "
+                              "or start Ollama with OLLAMA_CONTEXT_LENGTH=16384.", agent)
                 break
     save_trace(agent, {"provider": spec.provider, "model": spec.model, "system": system_prompt, "user": user, "reply": raw, "error": last_err})
     log_event("llm_call", agent=agent, provider=spec.provider, model=spec.model, ms=t["ms"], ok=parsed is not None, error=last_err[:200])

@@ -86,7 +86,7 @@ def test_shipped_model_config_defaults_to_local_ollama():
     cfg = f.load_model_config()
     for agent in ("fundamental", "industry", "indicator", "trend_flow", "option_chain", "decision_maker"):
         assert f.resolve_spec(agent, cfg).provider == "ollama"
-        assert f.resolve_spec(agent, cfg).model == "gemma3-12b-16k"
+        assert f.resolve_spec(agent, cfg).model == "nemotron-e4b-16k"
 
 
 def test_olmx_provider_builds_chatopenai_with_custom_base_url_and_key(monkeypatch):

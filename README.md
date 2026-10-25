@@ -26,7 +26,7 @@ python -m app.main --stub --mode inprocess               # fake LLM, real tools
 ```
 Outputs: `data/output/ranking_<run>.csv`, `data/output/stock_scores_<run>.xlsx` (Rankings, Agent Scores, Events, Data Quality, Configuration), `data/events.csv` (event ledger).
 
-> The shipped default is a **local LLM via Ollama** (`gemma3-12b-16k`). See [Running on a local LLM](#running-on-a-local-llm-ollama--gemma-3-12b) before your first real run.
+> The shipped default is a **local LLM via Ollama** (`nemotron-e4b-16k`). See [Running on a local LLM](#running-on-a-local-llm-ollama--gemma-3-12b) before your first real run.
 
 ## FastAPI interface
 
@@ -57,7 +57,7 @@ Open `http://127.0.0.1:8000/` for the JavaScript dashboard. It supports stock se
 Only one scoring run is allowed at a time in a single API process; in-memory run bookkeeping is bounded (last 50 runs). The API is bound to localhost by default; do not expose it publicly without authentication and deployment hardening. It is research-only and does not place orders. The CLI remains available as an alternative.
 
 ## LLM models per agent
-The provider and model for each agent live in `app/service/models/model_config.json`. The shipped default runs **locally on Ollama** (`gemma3-12b-16k` for every agent; the Decision Maker at temperature 0.0). Agent keys are `fundamental, industry, indicator, trend_flow, option_chain, decision_maker`; unspecified agents use `default`.
+The provider and model for each agent live in `app/service/models/model_config.json`. The shipped default runs **locally on Ollama** (`nemotron-e4b-16k` for every agent; the Decision Maker at temperature 0.0). Agent keys are `fundamental, industry, indicator, trend_flow, option_chain, decision_maker`; unspecified agents use `default`.
 
 Supported providers: `ollama` (local), `olmx` (local, OpenAI-compatible), `openai` (hosted), and `stub` (offline tests/demos). To use OpenAI instead, set `OPENAI_API_KEY` in `.env` and change the `provider`/`model` fields (e.g. `gpt-4o` for `fundamental`/`option_chain`/`decision_maker`, `gpt-4o-mini` for the rest).
 
@@ -65,24 +65,25 @@ The dashboard also lets you pick **Ollama**, **OLMX**, or **OpenAI** for a singl
 
 ## Running on a local LLM (Ollama / Gemma 3 12B)
 
-The default `model_config.json` targets a **custom Ollama model `gemma3-12b-16k`**. Build it once:
+The default `model_config.json` targets a **custom Ollama model `nemotron-e4b-16k`** (a 4B model — fast enough for a laptop — rebuilt with a 16k context window). Build it once:
 
 ```bash
-ollama pull gemma3:12b
-ollama create gemma3-12b-16k -f app/config/ollama/gemma3-12b-16k.Modelfile
-ollama list    # confirm gemma3-12b-16k is present
+ollama pull hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M
+ollama create nemotron-e4b-16k -f app/config/ollama/nemotron-e4b-16k.Modelfile
+ollama show nemotron-e4b-16k --modelfile | grep num_ctx   # confirm 16384
 ```
 
-Why the custom model and not plain `gemma3:12b`? The Fundamental prompt is ~8k tokens (system prompt + evidence). Pulled plain, Ollama uses a small default context window and **silently truncates** the prompt, so the model scores on partial data. The Modelfile bakes in `num_ctx 16384` so the whole prompt fits — the same trick as the older `...-16k` qwen build.
+**Why a custom model and not the plain tag?** Ollama's default context is **4096 tokens**, but the agent prompts (Fundamental ~5k, Industry ~4k) plus their JSON answer don't fit, so calls fail with `exceeds the available context size (4096)` or get truncated (`LengthFinishReasonError`). **Critically, Ollama's OpenAI-compatible `/v1` endpoint ignores a per-call `num_ctx`** — so `OLLAMA_NUM_CTX` in `.env` only works on very recent Ollama builds. The reliable fix is to raise the window **on the server**: either bake `PARAMETER num_ctx 16384` into a Modelfile (as above — works on every version) or start Ollama with `OLLAMA_CONTEXT_LENGTH=16384`. The same `app/config/ollama/` folder also ships a `gemma3-12b-16k.Modelfile` if you prefer a larger model (slower on a laptop).
 
 Local-inference settings (set in `.env` / the environment; tune only after checking measured throughput):
+- `OLLAMA_NUM_CTX=16384` (default) — context requested per call. Honoured only by recent Ollama; otherwise use a Modelfile or `OLLAMA_CONTEXT_LENGTH` (above).
 - `LLM_JSON_OBJECT=1` (default) — asks Ollama/OLMX to return a JSON object. Local models otherwise emit the occasional malformed reply, which forces a full validation re-ask (double the tokens + latency). Scoped to local providers; OpenAI/stub are unaffected.
-- `OLLAMA_MAX_CONCURRENT_REQUESTS` — simultaneous generations **per model**. For a 12B keep this at `1` (or `2` only if the GPU has clear headroom); concurrent 12B generations contend for memory/compute and usually make total wall-time worse.
+- `OLLAMA_MAX_CONCURRENT_REQUESTS` — simultaneous generations **per model**. Keep at `1` on a laptop; concurrent generations contend for memory/compute and usually make total wall-time worse.
 - `OLLAMA_MAX_RETRIES=0` (default) — a timed-out request fails once instead of waiting through long retry cycles.
-- `OLLAMA_KEEP_ALIVE=30m` (set on the Ollama **server**) — keeps the 12B resident between agent calls; otherwise each run pays a model-reload stall (visible as queue time in the token panel).
-- `LLM_TIMEOUT_SECONDS` — raise if a 12B is slow on your hardware.
+- `OLLAMA_KEEP_ALIVE=30m` (set on the Ollama **server**) — keeps the model resident between agent calls; otherwise each run pays a model-reload stall (visible as queue time in the token panel).
+- `LLM_TIMEOUT_SECONDS` — raise if a large model is slow on your hardware.
 
-VRAM note: `gemma3:12b` (q4) is ~8 GB of weights plus a few GB of KV cache at 16k context. If memory is tight, lower `num_ctx` to 12288 in the Modelfile rather than running at the default — a truncated prompt is worse than a slightly smaller window.
+A big local model (e.g. `gemma3:12b`) on a laptop can take minutes per call and time out; a 4B model with a 16k context (the shipped default) is the pragmatic choice. Lower `num_ctx` to 8192 in the Modelfile if memory is tight — but never leave it at the 4096 default.
 
 ## Layout
 ```
