@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, status
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 from app.service import logger
@@ -323,6 +323,25 @@ async def get_run_progress(run_id: str) -> dict[str, Any]:
     if snap is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return snap
+
+
+@app.get("/api/runs/{run_id}/report", tags=["runs"])
+async def get_run_report(run_id: str, symbol: str | None = None, format: str = Query(default="md", pattern="^(md|json)$")) -> Response:
+    """Download a debug report of every agent's model input (system + payload) and output (raw reply) for a run.
+    Optional `symbol` limits it to one stock; `format` is md (default) or json."""
+    known = run_id in _run_tasks or any(r.get("run_id") == run_id for r in run_store.list_runs(limit=200))
+    if not known:
+        raise HTTPException(status_code=404, detail="Run not found")
+    from app.export import report as report_mod
+    safe_symbol = ("".join(c for c in symbol.upper() if c.isalnum() or c in "._-")) if symbol else None
+    data = report_mod.build_report(run_id, safe_symbol)
+    stem = f"report_{Path(run_id).name}" + (f"_{safe_symbol}" if safe_symbol else "")
+    if format == "json":
+        body, media, ext = report_mod.report_json(data), "application/json", "json"
+    else:
+        body, media, ext = report_mod.report_markdown(data), "text/markdown; charset=utf-8", "md"
+    return Response(content=body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{stem}.{ext}"'})
 
 
 @app.get("/api/runs/{run_id}/traces", tags=["runs"])

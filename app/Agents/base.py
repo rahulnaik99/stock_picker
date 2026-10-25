@@ -169,7 +169,8 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
                               "Ollama's /v1 endpoint): build a Modelfile with `PARAMETER num_ctx 16384` (see app/config/ollama/) "
                               "or start Ollama with OLLAMA_CONTEXT_LENGTH=16384.", agent)
                 break
-    save_trace(agent, {"provider": spec.provider, "model": spec.model, "system": system_prompt, "user": user, "reply": raw, "error": last_err})
+    save_trace(agent, {"provider": spec.provider, "model": spec.model, "system": system_prompt, "user": user,
+                       "reply": raw, "error": last_err, "tools": tool_results})
     log_event("llm_call", agent=agent, provider=spec.provider, model=spec.model, ms=t["ms"], ok=parsed is not None, error=last_err[:200])
     base = dict(agent=agent, symbol=symbol, provider=spec.provider, model=spec.model, duration_ms=t["ms"], sources=source_rows(tool_results),
                 input_tokens=tok_in, output_tokens=tok_out, context_used=user[:MAX_CONTEXT_STORED])

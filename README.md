@@ -52,6 +52,7 @@ Open `http://127.0.0.1:8000/` for the JavaScript dashboard. It supports stock se
 - `GET /api/runs/{run_id}/results` — ranked output once complete; `?valid_only=true` filters invalid/ineligible rows (the exported CSV now carries a `valid` column so this works after a restart too).
 - `GET /api/runs/{run_id}/agents?symbol=SBIN` — agent scores, evidence, provenance, reasoning and per-agent token usage.
 - `GET /api/runs/{run_id}/traces?symbol=SBIN` — exact prompt and raw model reply saved per agent (local debugging; prompts can contain market data — keep the dashboard private).
+- `GET /api/runs/{run_id}/report?format=md|json[&symbol=SBIN]` — downloadable debug report bundling every agent's model **input** (system prompt + payload) and **output** (raw reply) plus scores/baseline/adjustment/tokens and the final verdict. The dashboard's trace viewer has "Export report (.md/.json)" buttons for this.
 - `GET /api/runs` — recent runs.
 
 Only one scoring run is allowed at a time in a single API process; in-memory run bookkeeping is bounded (last 50 runs). The API is bound to localhost by default; do not expose it publicly without authentication and deployment hardening. It is research-only and does not place orders. The CLI remains available as an alternative.
