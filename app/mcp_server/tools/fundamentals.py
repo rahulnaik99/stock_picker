@@ -212,6 +212,20 @@ def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     payload = nse_tools.nse_get("/api/corporates-financial-results", params, referer=ref)
     raw = nse_tools._rows(payload)
     filings = nse_filings(raw, sym)
+    # Post-2024 results moved to SEBI's "Integrated Filing" framework on a separate endpoint; the classic list
+    # above stops at the format cutover. Try the integrated endpoint too and merge (best-effort, diagnosed).
+    integ: dict[str, Any] = {}
+    try:
+        ipayload = nse_tools.nse_get("/api/integrated-filing-results", {"index": "equities", "symbol": sym, "period": "Quarterly", "type": "IF"}, referer=ref)
+        iraw = nse_tools._rows(ipayload)
+        ifilings = nse_filings(iraw, sym)
+        integ = {"rows": len(iraw), "filings_parsed": len(ifilings),
+                 "sample_keys": (sorted(iraw[0].keys())[:30] if iraw else []),
+                 "newest": (max((f["period_end"] for f in ifilings), default=None))}
+        existing = {(f["period_end"], f["basis"]) for f in filings}
+        filings += [f for f in ifilings if (f["period_end"], f["basis"]) not in existing]
+    except Exception as exc:  # noqa: BLE001
+        integ = {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
     by_recent = sorted(filings, key=lambda f: f["period_end"], reverse=True)
     cons = [f for f in by_recent if f["basis"] == "consolidated" and f.get("xbrl_url")]
     targets = (cons or [f for f in by_recent if f.get("xbrl_url")])[:NSE_XBRL_MAX]
@@ -253,6 +267,7 @@ def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             "newest_filing_any": (by_recent[0]["period_end"] if by_recent else None),
             "newest_consolidated_with_xbrl": (cons[0]["period_end"] if cons else None),
             "filings_with_xbrl": sum(1 for f in filings if f.get("xbrl_url")),
+            "integrated_filing": integ,
             "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else []),
             "recent_raw": recent_raw, "xbrl": xd, "latest_filing": lf}
     return rows, diag

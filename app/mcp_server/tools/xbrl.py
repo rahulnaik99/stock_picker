@@ -42,6 +42,8 @@ _XBRL_EXACT: dict[str, tuple[str, ...]] = {
     "crar_pct":     ("capitaladequacyratio", "capitaltoriskweightedassetsratio", "percentageofcapitaladequacyratio", "capitaladequacyratiobaseliii"),
     "net_npa_pct":  ("percentageofnetnpa", "percentageofnetnpi", "percentageofnpa"),
     "net_npa_amt":  ("netnonperformingassets", "nonperformingassets"),
+    "cet1_pct":     ("cet1ratio", "commonequitytier1ratio"),
+    "at1_pct":      ("additionaltier1ratio",),
 }
 _AMOUNT_KPIS = ("gross_npa_amt", "net_npa_amt", "interest_earned", "interest_expended", "other_income", "nii", "total_income", "pbt", "pat", "op_profit")
 _REPORTED = ("gross_npa_pct", "net_npa_pct", "crar_pct", "nii", "total_income", "pbt", "pat", "eps", "op_profit", "pcr_pct")
