@@ -81,6 +81,11 @@ def _openai_compatible(base_url: str | Callable[[Settings], str], key: Callable[
         # The OpenAI API itself needs the word "json" in the prompt, so this stays scoped to local providers.
         if s.llm_json_object and spec.provider in ("ollama", "olmx"):
             kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
+        # Raise the local context window so large agent prompts + their JSON answer fit (Ollama defaults to 4096).
+        # Honoured by recent Ollama via the request body; if yours ignores it, set the OLLAMA_CONTEXT_LENGTH env var
+        # on the server or bake `PARAMETER num_ctx` into a Modelfile (see app/config/ollama/).
+        if spec.provider in ("ollama", "olmx") and s.ollama_num_ctx > 0:
+            kwargs["extra_body"] = {"options": {"num_ctx": s.ollama_num_ctx}}
         return ChatOpenAI(**kwargs)
 
     return build

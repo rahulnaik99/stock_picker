@@ -51,6 +51,8 @@ def test_ollama_provider_builds_chatopenai(monkeypatch):
     assert llm._model.kwargs["api_key"] == "ollama"
     assert llm._model.kwargs["max_retries"] == 0
     assert spec.provider == "ollama"
+    # Context window is raised so large agent prompts + their JSON answer fit (Ollama defaults to 4096).
+    assert llm._model.kwargs["extra_body"] == {"options": {"num_ctx": get_settings().ollama_num_ctx}}
     f._build.cache_clear()
 
 

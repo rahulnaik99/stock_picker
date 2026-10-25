@@ -1,0 +1,19 @@
+# Nemotron-3.5-Bolt-E4B with an 8k context window for the stock-scoring pipeline.
+#
+# WHY: Ollama's default context is 4096 tokens. The agent prompts (Fundamental ~4.8k, Industry ~3.7k) plus their
+# JSON answer do not fit in 4096, so calls 400 ("exceeds the available context size") or get truncated
+# (LengthFinishReasonError). 8192 holds the prompt and leaves room for the reply.
+#
+# You usually do NOT need this file: the app now requests num_ctx=8192 per call (OLLAMA_NUM_CTX), which recent
+# Ollama honours. Use this (or OLLAMA_CONTEXT_LENGTH) only if your Ollama ignores the per-request option.
+#
+# BUILD:
+#   ollama create nemotron-e4b-8k -f app/config/ollama/nemotron-e4b-8k.Modelfile
+#   # then set this name in app/service/models/model_config.json
+#
+# A 4B model at 8k context is light enough for a MacBook Air. Raise num_ctx if your prompts grow.
+
+FROM hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M
+
+PARAMETER num_ctx 8192
+PARAMETER num_predict 2000

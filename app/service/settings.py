@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     ollama_max_retries: int = 0
     ollama_max_concurrent_requests: int = 2
+    # Context window requested from the local server per call. Ollama's default is only 4096, which is too small for
+    # the agent prompts + their JSON answer. 0 disables sending it (then rely on OLLAMA_CONTEXT_LENGTH or a Modelfile).
+    ollama_num_ctx: int = 8192
     # Local models (Ollama/OLMX) emit far fewer malformed JSON replies when the server is told to
     # return a JSON object; this removes most validation re-asks. Does not change OpenAI/stub behaviour.
     llm_json_object: bool = True
