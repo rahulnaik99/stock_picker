@@ -15,7 +15,7 @@ Live per-agent progress and per-agent token usage are streamed to the dashboard 
 ## Quick start
 ```bash
 pip install -r requirements.txt
-cp .env.example .env            # add keys for the providers you use + FYERS_APP_ID / FYERS_ACCESS_TOKEN
+cp .env.example .env            # local LLM by default; add FYERS_* (token via `python -m scripts.fyers_login`) / FRED_API_KEY as needed
 python -m pytest -q             # 99 tests, fully offline
 python -m scripts.dry_run       # offline end-to-end run (fake LLM + synthetic data) -> data/dry_run/
 ./run.sh --ui                                          # FastAPI + live dashboard at http://127.0.0.1:8000
@@ -134,7 +134,7 @@ Each agent can call only the tools in its own `TOOLS` list. Every tool returns `
 ## Known limits (verify on your machine)
 - NSE endpoints are unofficial and bot-protected: if blocked, set `NSE_COOKIES` from your browser. Failed feeds show as `unavailable`/`error`, never as neutral.
 - RBI repo rate is not on a stable machine-readable endpoint: keep `config/policy_rates.json` current (shipped as `null`, which the Industry agent reports as "not verified").
-- FYERS option-chain field names follow the v3 response shape and are covered by a fixture test, but have not been run against the live API from here. FYERS tokens expire daily.
+- FYERS option-chain field names follow the v3 response shape and are covered by a fixture test, but have not been run against the live API from here. **FYERS access tokens expire daily** — regenerate with `python -m scripts.fyers_login` (needs `FYERS_APP_ID`, `FYERS_SECRET_ID`, `FYERS_REDIRECT_URI` in `.env`); pasting an old token will fail with an auth error, after which candles fall back to Yahoo automatically.
 - Weekly/monthly OI change needs saved daily snapshots, so it is empty until the app has run on several days.
 - Yahoo fundamentals are a current snapshot (not point-in-time); bank NIM/NPA must come from filings.
 - Initial weights and thresholds are hypotheses: validate with a walk-forward backtest before trusting rank for trading.

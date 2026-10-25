@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Market data
     fyers_app_id: str = ""
     fyers_access_token: str = ""
+    fyers_secret_id: str = ""      # FYERS app "Secret ID" (needed only to generate the daily token via scripts.fyers_login)
+    fyers_redirect_uri: str = ""   # must exactly match the redirect URI registered on your FYERS app
     fred_api_key: str = ""
     nse_cookies: str = ""
     nse_user_agent: str = ""

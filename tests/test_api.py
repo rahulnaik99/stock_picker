@@ -60,11 +60,13 @@ def test_dashboard_contains_agent_trace_viewer():
     assert "/traces?symbol=" in response.text
 
 
-def test_dashboard_contains_olmx_provider_option():
+def test_dashboard_has_no_llm_selector_and_points_to_model_config():
     response = client.get("/")
     assert response.status_code == 200
-    assert 'value="olmx"' in response.text
-    assert 'id="llmModel"' in response.text
+    # The LLM provider/model picker was removed: model_config.json is the single source of truth.
+    assert 'id="llmProvider"' not in response.text
+    assert 'id="llmModel"' not in response.text
+    assert "model_config.json" in response.text
 
 
 def test_dashboard_contains_live_agent_run_and_token_calculation():

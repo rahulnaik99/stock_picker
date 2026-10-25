@@ -58,7 +58,8 @@ def _fyers_candles(symbol: str, resolution: str, start: datetime, end: datetime,
             "symbol": fyers_symbol(symbol), "resolution": res, "date_format": "1",
             "range_from": cursor.isoformat(), "range_to": chunk_end.isoformat(), "cont_flag": "1"})
         if resp.status_code in (401, 403):
-            raise SourceError("FYERS authentication failed (token expired? regenerate FYERS_ACCESS_TOKEN)")
+            raise SourceError(f"FYERS authentication failed (HTTP {resp.status_code}: {resp.text[:200]}). "
+                              "Token expired/invalid? Regenerate it with: python -m scripts.fyers_login")
         payload = resp.json()
         if payload.get("s") == "no_data":
             pass
@@ -100,7 +101,8 @@ def fetch_candles(symbol: str, resolution: str, days: int, as_of: str | None = N
         global _fyers_auth_warning_emitted
         if "authentication failed" in str(exc).lower():
             if not _fyers_auth_warning_emitted:
-                log.warning("FYERS authentication failed; using Yahoo fallback. Refresh FYERS_ACCESS_TOKEN to restore FYERS data (further auth warnings suppressed).")
+                log.warning("FYERS auth failed, using Yahoo fallback (further auth warnings suppressed). Reason: %s", exc)
+                log.warning("Regenerate the daily FYERS token with: python -m scripts.fyers_login")
                 _fyers_auth_warning_emitted = True
             else:
                 log.debug("FYERS authentication failed for %s; using Yahoo fallback", symbol)
@@ -240,7 +242,8 @@ def get_option_chain(symbol: str, strikecount: int = 10, as_of: str | None = Non
         resp = http_get(requests.Session(), FYERS_OPTION_CHAIN_URL, headers={"Authorization": f"{s.fyers_app_id}:{s.fyers_access_token}"},
                         params={"symbol": fyers_symbol(symbol), "strikecount": str(strikecount)})
         if resp.status_code in (401, 403):
-            return error(src, "FYERS authentication failed (token expired?)")
+            return error(src, f"FYERS authentication failed (HTTP {resp.status_code}: {resp.text[:200]}). "
+                              "Token expired/invalid? Regenerate it with: python -m scripts.fyers_login")
         payload = resp.json()
         if payload.get("s") != "ok":
             return unavailable(src, f"no option chain: {payload.get('message') or payload.get('code')}")
