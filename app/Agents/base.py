@@ -59,13 +59,22 @@ def extract_json(text: str) -> dict[str, Any]:
     raise ValueError("unterminated JSON object")
 
 
-def compact(envelope: dict[str, Any], max_items: int = 15) -> dict[str, Any]:
-    """Trim a tool envelope for the prompt (long lists are cut; metadata kept)."""
+# URLs are for humans (the UI/DB keep them); the LLM cannot click them and they are very long
+# (Google-News redirect links run 500+ chars each), so strip them from the model payload to save tokens.
+_LLM_NOISE_KEYS = ("url", "source_url", "link", "guid")
+
+
+def compact(envelope: dict[str, Any], max_items: int = 15, drop_keys: tuple[str, ...] = _LLM_NOISE_KEYS) -> dict[str, Any]:
+    """Trim a tool envelope for the prompt: cut long lists and drop noisy URL-ish fields (kept in storage)."""
     out = dict(envelope)
     data = out.get("data")
-    if isinstance(data, list) and len(data) > max_items:
-        out["data"] = data[:max_items]
-        out["truncated_from"] = len(data)
+    if isinstance(data, list):
+        if len(data) > max_items:
+            out["truncated_from"] = len(data)
+            data = data[:max_items]
+        if drop_keys:
+            data = [{k: v for k, v in item.items() if k not in drop_keys} if isinstance(item, dict) else item for item in data]
+        out["data"] = data
     return out
 
 

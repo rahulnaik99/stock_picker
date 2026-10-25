@@ -42,11 +42,13 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         return unavailable_result(NAME, symbol, results, "No NSE events, quarterly results, fundamentals or news could be retrieved.")
 
     evidence = {
-        "events_ledger": [{k: e[k] for k in ("event_id", "event_type", "event_status", "event_date", "published_at", "event_summary", "source_url")}
-                          for e in events[:40]],
+        # Cap to the most recent events and drop the long source_url/published_at (kept in the ledger for the UI);
+        # the model cites event_id, not the URL. This keeps the prompt within small local-model context windows.
+        "events_ledger": [{k: e[k] for k in ("event_id", "event_type", "event_status", "event_date", "event_summary")}
+                          for e in events[:15]],
         "quarterly_results": qres if qres["status"] != "ok" else {**qres["data"], "operating_profit_kind": qres.get("operating_profit_kind"),
                                                                    "latest_period": qres.get("latest_period"), "source_errors": qres.get("source_errors")},
-        "yf_fundamentals": _ratios_only(fund), "news": compact(news, 10),
+        "yf_fundamentals": _ratios_only(fund), "news": compact(news, 6),
         "tool_status": {k: v["status"] for k, v in results.items()},
     }
     res = await analyze(agent=NAME, llm_key=NAME, symbol=symbol, system_prompt=load_prompt(__file__, sub_sector=meta.get("sub_sector", "")),
