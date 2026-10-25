@@ -75,8 +75,9 @@ def _get_session() -> requests.Session:
     return _session
 
 
-def nse_get(path: str, params: dict[str, str] | None = None) -> Any:
-    resp = http_get(_get_session(), f"{BASE}{path}", params=params)
+def nse_get(path: str, params: dict[str, str] | None = None, referer: str | None = None) -> Any:
+    headers = {"Referer": referer} if referer else None
+    resp = http_get(_get_session(), f"{BASE}{path}", params=params, headers=headers)
     if resp.status_code in (401, 403):
         raise SourceError("NSE blocked the request (HTTP %s). Set NSE_COOKIES in .env from your browser." % resp.status_code)
     if not resp.ok:
@@ -91,6 +92,17 @@ def _rows(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict):
         payload = payload.get("data") or payload.get("rows") or []
     return [r for r in payload if isinstance(r, dict)] if isinstance(payload, list) else []
+
+
+def nse_get_bytes(url: str, referer: str | None = None) -> tuple[bytes, int]:
+    """Fetch a raw document (e.g. an XBRL file on nsearchives) through the warmed NSE session. Returns (content, http_status)."""
+    headers = {"Referer": referer, "Accept": "application/xml, text/xml, */*"} if referer else {"Accept": "application/xml, text/xml, */*"}
+    resp = http_get(_get_session(), url, headers=headers)
+    if resp.status_code in (401, 403):
+        raise SourceError("NSE blocked the request (HTTP %s). Set NSE_COOKIES in .env from your browser." % resp.status_code)
+    if not resp.ok:
+        raise SourceError(f"NSE HTTP {resp.status_code} for {url}")
+    return resp.content, resp.status_code
 
 
 def _fmt(d: datetime) -> str:

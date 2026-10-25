@@ -41,6 +41,18 @@ def test_parse_nse_results_converts_lakh_to_crore_and_basis():
     assert rows[0]["basis"] == "consolidated" and rows[1]["basis"] == "standalone" and rows[0]["source"] == "nse"
 
 
+def test_parse_nse_results_real_schema_and_provenance():
+    # Real NSE corporates-financial-results keys + the actual CANBK Sep-2026 consolidated filing (INR lakh in, crore out).
+    rows = fundamentals.parse_nse_results([
+        {"to_date": "30-Sep-2026", "re_broadcast_timestamp": "14-Oct-2026 17:40", "income": "4093880.00",
+         "reProLossBefTax": "698562.00", "proLossAftTax": "518203.00", "reDilEPS": "5.93", "consolidated": "Consolidated",
+         "audited": "Un-Audited", "xbrl_attachment": "https://nsearchives.nseindia.com/corporate/xbrl/CANBK.xml"}], "CANBK")
+    r = rows[0]
+    assert r["revenue"] == 40938.8 and r["pbt"] == 6985.62 and r["pat"] == 5182.03 and r["eps"] == 5.93
+    assert r["basis"] == "consolidated" and r["reported_on"] == "2026-10-14"
+    assert r["audited"] == "Un-Audited" and r["xbrl_url"].endswith("CANBK.xml")
+
+
 def test_parse_yahoo_statement_lender_ppop_and_ebitda():
     cols = [pd.Timestamp("2026-09-30"), pd.Timestamp("2026-06-30")]
     df = pd.DataFrame({cols[0]: [3.1e11, 1.0e11, 7e10, 2e11, 41.0, 2e10], cols[1]: [3.0e11, 0.9e11, 6e10, 1.9e11, 38.0, 1e10]},
@@ -59,6 +71,32 @@ def test_merge_op_profit_borrows_from_yahoo_and_flags_unit_mismatch():
                   {"period_end": "2026-06-30", "revenue": 100.0, "op_profit": 38.0, "op_kind": "EBITDA"}]
     notes = fundamentals.merge_op_profit(nse_rows, yahoo_rows)
     assert nse_rows[0]["op_profit"] == 40.0 and nse_rows[0]["op_kind"] == "EBITDA(yahoo)" and len(notes) == 1 and "2026-06-30" in notes[0]
+
+
+def test_fetch_yahoo_results_merges_both_statements(monkeypatch):
+    import yfinance as yf
+    # quarterly_income_stmt lags (no Sep-30); quarterly_financials carries the newer quarter. Merge must include both.
+    income = pd.DataFrame({pd.Timestamp("2026-06-30"): [1.7e12, 6.5e10, 5.18e10, 5.71]},
+                          index=["Total Revenue", "Pretax Income", "Net Income", "Basic EPS"])
+    fin = pd.DataFrame({pd.Timestamp("2026-09-30"): [1.67e12, 6.98e10, 5.38e10, 5.93], pd.Timestamp("2026-06-30"): [1.7e12, 6.5e10, 5.18e10, 5.71]},
+                       index=["Total Revenue", "Pretax Income", "Net Income", "Basic EPS"])
+
+    class FakeTk:
+        quarterly_income_stmt = income
+        quarterly_financials = fin
+    monkeypatch.setattr(yf, "Ticker", lambda s: FakeTk())
+    rows = fundamentals._fetch_yahoo_results("SBIN", "bank_psu")
+    ends = [r["period_end"] for r in rows]
+    assert "2026-09-30" in ends and "2026-06-30" in ends
+    assert next(r for r in rows if r["period_end"] == "2026-09-30")["pat"] == 5380.0
+
+
+def test_bank_kpis_yahoo_surfaces_nii():
+    from app.Agents.Fundamental import agent as fa
+    fund = {"status": "ok", "data": {"quarterly": [{"period_end": "2026-09-30", "Net Interest Income": 1.1e11, "Net Income": 5.38e10, "Basic EPS": 5.93}]}}
+    k = fa._bank_kpis_yahoo(fund)
+    assert k["quarters"][0]["nii_cr"] == 11000.0 and k["quarters"][0]["net_income_cr"] == 5380.0
+    assert fa._bank_kpis_yahoo({"status": "unavailable"}) is None
 
 
 def test_compute_metrics_qoq_yoy_streak_and_gaps():
@@ -95,10 +133,31 @@ def _no_fetch(monkeypatch):
 
 
 def test_results_younger_than_70_days_use_stored_data(monkeypatch):
+    monkeypatch.setattr(get_settings(), "always_fresh", False)  # this test exercises the 70-day gate (always_fresh overrides it)
     fq.upsert_quarters([qrow("SBIN", 400 - 91 * i, 100 + i) for i in range(5)] + [qrow("SBIN", 40, 120)])
     _no_fetch(monkeypatch)
     out = fundamentals.quarterly_fundamentals("SBIN", sub_sector="bank_psu")
     assert out["status"] == "ok" and out["cache"] == "hit" and out["data"]["metrics"]["quarters_available"] == 6
+
+
+def test_always_fresh_refetches_even_when_under_70_days(monkeypatch):
+    fq.upsert_quarters([qrow("SBIN", 40, 120)])          # data is fresh (<70 days)
+    calls = []
+    monkeypatch.setattr(fundamentals, "_fetch_nse_results", lambda sym: calls.append("nse") or [qrow(sym, 35, 121)])
+    monkeypatch.setattr(fundamentals, "_fetch_yahoo_results", lambda sym, sub: calls.append("yahoo") or [])
+    out = fundamentals.quarterly_fundamentals("SBIN")     # always_fresh default True -> refetch anyway
+    assert out["cache"] == "refreshed" and "nse" in calls
+
+
+def test_reset_daily_caches_clears_gate_and_volatile_kv():
+    from app.store.db import kv_get, kv_set, mark_refreshed, refreshed_today, reset_daily_caches
+    mark_refreshed("results", "SBIN")
+    kv_set("option_chain", "SBIN|d", {"a": 1})
+    kv_set("industry_score", "2026-10-25:v2", {"s": 1})
+    assert refreshed_today("results", "SBIN")
+    reset_daily_caches()
+    assert not refreshed_today("results", "SBIN")
+    assert kv_get("option_chain", "SBIN|d") is None and kv_get("industry_score", "2026-10-25:v2") is None
 
 
 def test_results_older_than_70_days_fetch_once_then_gate(monkeypatch):

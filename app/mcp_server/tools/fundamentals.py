@@ -48,7 +48,9 @@ def yf_fundamentals(symbol: str) -> dict[str, Any]:
 from datetime import date, timedelta  # noqa: E402
 
 from app.mcp_server.tools import nse as nse_tools  # noqa: E402
+from app.mcp_server.tools import xbrl  # noqa: E402
 from app.mcp_server.tools.common import now_ist, parse_any_dt, parse_as_of  # noqa: E402
+from app.service.settings import get_settings  # noqa: E402
 from app.store import fundamentals as fq  # noqa: E402
 from app.store.db import mark_refreshed, refreshed_today  # noqa: E402
 
@@ -59,12 +61,13 @@ LENDER_PREFIXES = ("bank_", "nbfc", "housing_finance", "govt_financier")
 
 _NSE_KEYS = {
     "period_end": ("toDate", "to_date", "periodEnded", "period_end"),
-    "reported_on": ("broadcastDate", "filingDate", "exchdisstime", "filing_date"),
-    "revenue": ("income", "totalIncome", "re_income", "revenue", "reTotInc"),
+    "reported_on": ("re_broadcast_timestamp", "broadcastDate", "broadcast_date_time", "exchdisstime", "filingDate", "filing_date"),
+    "revenue": ("income", "totalIncome", "reTotalIncome", "re_income", "totalIncomeFromOperations", "revenue", "reTotInc"),
     "pbt": ("reProLossBefTax", "proLossBefTax", "profitBeforeTax", "pbt", "re_pro_loss_bef_tax"),
     "pat": ("proLossAftTax", "reProLossAftTax", "netProfit", "pat", "re_pro_loss_aft_tax"),
-    "eps": ("reDilEPS", "reBasicEPS", "eps", "dilEPS", "re_dil_eps"),
+    "eps": ("reDilEPS", "reBasicEPS", "basicEPS", "dilutedEPS", "eps", "dilEPS", "re_dil_eps"),
 }
+_NSE_ATTACH = ("xbrl_attachment", "xbrl", "naVal", "na_attachment", "attachment")
 
 
 def is_lender(sub_sector: str | None) -> bool:
@@ -101,7 +104,10 @@ def parse_nse_results(rows: list[dict[str, Any]], symbol: str) -> list[dict[str,
         conv = lambda k: (None if (v := _num(_first(r, _NSE_KEYS[k]))) is None else round(v / NSE_UNIT_DIVISOR, 2))  # noqa: E731
         row = {"symbol": symbol, "period_end": end.date().isoformat(), "basis": basis, "source": "nse", "op_profit": None, "op_kind": None,
                "reported_on": reported.date().isoformat() if reported else None,
-               "revenue": conv("revenue"), "pbt": conv("pbt"), "pat": conv("pat"), "eps": _num(_first(r, _NSE_KEYS["eps"]))}
+               "revenue": conv("revenue"), "pbt": conv("pbt"), "pat": conv("pat"), "eps": _num(_first(r, _NSE_KEYS["eps"])),
+               # Provenance (not stored in the series table; surfaced to the agent so it can cite the filing).
+               "audited": (str(_first(r, ("audited", "audit")) or "").strip() or None),
+               "xbrl_url": _first(r, _NSE_ATTACH)}
         if row["revenue"] is not None or row["pat"] is not None:
             out.append(row)
     return out
@@ -157,18 +163,32 @@ def merge_op_profit(nse_rows: list[dict[str, Any]], yahoo_rows: list[dict[str, A
 
 
 def _fetch_nse_results(sym: str) -> list[dict[str, Any]]:
-    payload = nse_tools.nse_get("/api/corporates-financial-results", {"index": "equities", "symbol": sym, "period": "Quarterly"})
+    # NSE's corporate APIs expect a get-quote Referer for the symbol, otherwise they return a bot-check page.
+    payload = nse_tools.nse_get("/api/corporates-financial-results", {"index": "equities", "symbol": sym, "period": "Quarterly"},
+                                referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
     return parse_nse_results(nse_tools._rows(payload), sym)
+
+
+def _row_completeness(r: dict[str, Any]) -> int:
+    return sum(r.get(k) is not None for k in ("pat", "eps", "pbt", "revenue", "op_profit"))
 
 
 def _fetch_yahoo_results(sym: str, sub_sector: str | None) -> list[dict[str, Any]]:
     import yfinance as yf
 
     tk = yf.Ticker(yahoo_symbol(sym))
-    df = getattr(tk, "quarterly_income_stmt", None)
-    if df is None or getattr(df, "empty", True):
-        df = tk.quarterly_financials
-    return parse_yahoo_statement(df, sym, is_lender(sub_sector), sub_sector)
+    lender = is_lender(sub_sector)
+    # Yahoo exposes TWO quarterly income statements whose coverage differs: one often carries the most recently
+    # reported quarter the other still lacks. Merge both so the series is not a quarter behind, keeping the more
+    # complete row per period. (Both are source="yahoo", so pick_series stays single-source.)
+    by_end: dict[str, dict[str, Any]] = {}
+    for attr in ("quarterly_income_stmt", "quarterly_financials"):
+        df = getattr(tk, attr, None)
+        for r in parse_yahoo_statement(df, sym, lender, sub_sector):
+            cur = by_end.get(r["period_end"])
+            if cur is None or _row_completeness(r) > _row_completeness(cur):
+                by_end[r["period_end"]] = r
+    return sorted(by_end.values(), key=lambda r: r["period_end"])
 
 
 def _public_on(row: dict[str, Any]) -> date:
@@ -191,7 +211,8 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
         age = (today - latest).days if latest else None
         errors: list[str] = []
         cache = "hit"
-        if live and (latest is None or age >= RESULT_FRESH_DAYS) and not refreshed_today("results", sym):
+        filing: dict[str, Any] | None = None
+        if live and (latest is None or age >= RESULT_FRESH_DAYS or get_settings().always_fresh or get_settings().force_refresh) and not refreshed_today("results", sym):
             cache, nse_rows, yahoo_rows = "refreshed", [], []
             for name, fn in (("nse", lambda: _fetch_nse_results(sym)), ("yahoo", lambda: _fetch_yahoo_results(sym, sub_sector))):
                 try:
@@ -199,6 +220,16 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
                 except Exception as exc:  # noqa: BLE001 - one source failing must not hide the other
                     errors.append(f"{name}: {type(exc).__name__}: {str(exc)[:160]}")
             errors.extend(merge_op_profit(nse_rows, yahoo_rows))
+            if nse_rows:                        # provenance of the newest authoritative filing (for the agent to cite)
+                newest = max(nse_rows, key=lambda r: r["period_end"])
+                filing = {"period_end": newest["period_end"], "reported_on": newest.get("reported_on"),
+                          "audited": newest.get("audited"), "basis": newest["basis"], "xbrl_url": newest.get("xbrl_url")}
+                # Bank/lender KPIs (GNPA/NNPA/CRAR/NII) live in the XBRL, not the summary. Fetch+parse with full
+                # diagnostics; any failure is captured in `filing["xbrl"]`, never raised, so it shows in the report.
+                if is_lender(sub_sector) and filing.get("xbrl_url"):
+                    filing["xbrl"] = xbrl.fetch_bank_kpis(filing["xbrl_url"], referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
+                    if filing["xbrl"].get("status") not in ("ok", "partial"):
+                        errors.append(f"xbrl: {filing['xbrl'].get('status')} ({filing['xbrl'].get('error') or 'no KPIs matched'})")
             if nse_rows or yahoo_rows:
                 fq.upsert_quarters(nse_rows + yahoo_rows)
                 mark_refreshed("results", sym)      # a day with zero rows is retried on the next load
@@ -218,7 +249,7 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
             expected = "PPOP (approx.)" if is_lender(sub_sector) else "EBITDA"
             op_kind_label = f"unavailable (no {expected} in this series: NSE summary has no operating-profit line and no Yahoo match)"
         return ok(src, {"series_source": used, "basis": basis, "unit": "INR crore (EPS in INR)", "quarters": slim,
-                        "metrics": fq.compute_metrics(rows)},
+                        "latest_filing": filing, "metrics": fq.compute_metrics(rows)},
                   symbol=sym, cache=cache, latest_period=rows[-1]["period_end"], age_days=(today - date.fromisoformat(rows[-1]["period_end"])).days,
                   source_errors=errors, operating_profit_kind=op_kind_label)
     except Exception as exc:  # noqa: BLE001

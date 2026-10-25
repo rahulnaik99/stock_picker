@@ -63,7 +63,7 @@ def parse_any_dt(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=IST)
     text = str(value).strip()
-    for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%Y-%m-%dT%H:%M:%S", "%d %b %Y"):
+    for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%b-%Y %H:%M", "%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%Y-%m-%dT%H:%M:%S", "%d %b %Y"):
         try:
             return datetime.strptime(text, fmt).replace(tzinfo=IST)
         except ValueError:

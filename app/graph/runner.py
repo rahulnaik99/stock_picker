@@ -13,7 +13,7 @@ from app.graph.builder import build_graph
 from app.jobs.refresh import format_report, refresh_stale
 from app.ledger.events import EventLedger
 from app.mcp_server.client import ToolClient
-from app.mcp_server.tools.common import now_ist
+from app.mcp_server.tools.common import now_ist, parse_as_of
 from app.schemas import StockResult
 from app.scoring import policy
 from app.service import progress
@@ -58,6 +58,11 @@ async def run_universe(rows: list[dict[str, str]], as_of: str | None = None, run
     async with ToolClient(mode) as client:
         if refresh:
             with log_context(run_id=run_id):
+                # Always-fresh: wipe the day-gate + volatile caches so this run refetches every tool live
+                # (only for live runs; historical as_of reads stored data as-is).
+                if s.always_fresh and parse_as_of(as_of).date() >= now_ist().date():
+                    from app.store.db import reset_daily_caches
+                    reset_daily_caches()
                 last_refresh_report.clear()
                 last_refresh_report.update(await refresh_stale(client, rows, as_of))
                 log.info(format_report(last_refresh_report))

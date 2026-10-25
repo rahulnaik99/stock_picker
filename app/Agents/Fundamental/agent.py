@@ -26,6 +26,26 @@ def _ratios_only(fund: dict[str, Any]) -> dict[str, Any]:
     return {**{k: v for k, v in fund.items() if k != "data"}, "data": {"ratios": d.get("ratios"), "recent_dividends": d.get("recent_dividends")}}
 
 
+def _bank_kpis_yahoo(fund: dict[str, Any]) -> dict[str, Any] | None:
+    """Recent NII / net income / EPS from Yahoo's quarterly statement (INR crore, unofficial). This is the one place
+    NII is available without the results PDFs; keep it as context, cross-checked against filings."""
+    if fund.get("status") != "ok":
+        return None
+    cr = 1e7
+    rows = []
+    for q in ((fund.get("data") or {}).get("quarterly") or [])[:4]:
+        nii, ni = q.get("Net Interest Income"), q.get("Net Income")
+        if nii is None and ni is None:
+            continue
+        rows.append({"period_end": q.get("period_end"),
+                     "nii_cr": round(nii / cr, 2) if nii is not None else None,
+                     "net_income_cr": round(ni / cr, 2) if ni is not None else None,
+                     "eps": q.get("Basic EPS")})
+    if not rows:
+        return None
+    return {"source": "yahoo (unofficial, cross-check filings)", "unit": "INR crore", "quarters": rows}
+
+
 async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str | None, ledger: EventLedger | None = None) -> AgentResult:
     ledger = ledger or EventLedger()
     company = meta.get("company_name") or symbol
@@ -46,16 +66,36 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     # tell the model that quarter's actuals are missing (prevents attaching Jun figures to a just-filed Sep quarter).
     freshness = validators.results_freshness(events, qres.get("latest_period") if qres["status"] == "ok" else None)
 
+    # Quarterly results evidence. Keep the FULL tool response (incl. XBRL sample_tags) in `results` for the debug
+    # report, but send the LLM a slim view: compact bank KPIs + a filing without the heavy tag dump.
+    qr: dict[str, Any] = qres
+    bank_kpis_nse = None
+    if qres["status"] == "ok":
+        data = qres["data"]
+        qr = {**data, "operating_profit_kind": qres.get("operating_profit_kind"),
+              "latest_period": qres.get("latest_period"), "source_errors": qres.get("source_errors")}
+        filing = data.get("latest_filing")
+        if filing:
+            xd = filing.get("xbrl")
+            if xd:   # always surface the XBRL outcome (incl. failures) so the report is self-explanatory
+                bank_kpis_nse = {"status": xd.get("status"), "kpis": xd.get("kpis") or {}, "missing": xd.get("missing") or [],
+                                 "error": xd.get("error"), "source": "NSE results XBRL (authoritative)"}
+            qr["latest_filing"] = {k: filing[k] for k in ("period_end", "reported_on", "audited", "basis", "xbrl_url") if k in filing}
+
     evidence = {
         # Cap to the most recent events and drop the long source_url/published_at (kept in the ledger for the UI);
         # the model cites event_id, not the URL. This keeps the prompt within small local-model context windows.
         "events_ledger": [{k: e[k] for k in ("event_id", "event_type", "event_status", "event_date", "event_summary")}
                           for e in events[:15]],
-        "quarterly_results": qres if qres["status"] != "ok" else {**qres["data"], "operating_profit_kind": qres.get("operating_profit_kind"),
-                                                                   "latest_period": qres.get("latest_period"), "source_errors": qres.get("source_errors")},
+        "quarterly_results": qr,
         "yf_fundamentals": _ratios_only(fund), "news": compact(news, 6),
         "tool_status": {k: v["status"] for k, v in results.items()},
     }
+    if bank_kpis_nse:
+        evidence["bank_kpis_nse"] = bank_kpis_nse
+    kpis = _bank_kpis_yahoo(fund)
+    if kpis:
+        evidence["bank_kpis_yahoo"] = kpis
     if freshness:
         evidence["data_freshness"] = {"warning": freshness}
     metrics_block = (qres.get("data") or {}).get("metrics") if qres["status"] == "ok" else None

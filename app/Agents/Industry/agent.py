@@ -22,6 +22,8 @@ from app.store.db import kv_get, kv_set
 log = get_logger(__name__)
 NAME = "industry"
 SCOPE = "ALL_FINANCIALS"
+# Bump when the industry prompt or baseline changes so a stale shared score isn't reused the same day.
+SCORE_CACHE_VERSION = "v2"
 TOOLS = ["rbi_policy", "foreign_rates", "macro_snapshot", "policy_calendar", "news_search"]
 CFG = json.loads((ROOT / "app" / "config" / "sectors.json").read_text())["_financials_shared"]
 _locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = weakref.WeakKeyDictionary()
@@ -57,7 +59,7 @@ async def _compute(tools: AgentTools, as_of: str | None) -> AgentResult:
 
 
 async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str | None) -> AgentResult:
-    day = parse_as_of(as_of).date().isoformat()
+    day = f"{parse_as_of(as_of).date().isoformat()}:{SCORE_CACHE_VERSION}"
     async with _lock():                       # parallel stocks wait here; the first one computes, the rest reuse
         cached = None if get_settings().force_refresh else kv_get("industry_score", day)
         if cached:

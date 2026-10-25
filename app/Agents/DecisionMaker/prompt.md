@@ -15,7 +15,7 @@ One JSON object:
 3. Explain where specialists agree and where they conflict, and which conflict matters most.
 4. Propose a final score (-10..+10). It should sit near `policy.policy_score`. If you deviate by more than 1.5, the reasoning must say exactly why (for example one agent's evidence is stale or double counts another's).
    Do not count one event twice (the same RBI announcement may appear in the industry and fundamental reasoning).
-5. List the main risks, the next catalyst, and what would invalidate the thesis. For `next_catalyst`, pick the nearest DATED upcoming item from any specialist's `extra.upcoming_events` / `upcoming_catalysts` (e.g. an RBI MPC or FOMC date, a results/board meeting). Only say `"none"` if no specialist supplied a dated event.
+5. List the main risks, the next catalyst, and what would invalidate the thesis. For `next_catalyst`, pick the nearest specialist `extra.upcoming_events` / `upcoming_catalysts` item whose date is AFTER `stock.as_of` (a FUTURE event — e.g. an RBI MPC or FOMC date, a scheduled results/board meeting). Ignore events already in the past (a results filing that has already happened is not a catalyst). Only say `"none"` if no future dated event exists.
 6. Pick `trade_status`:
    - `POTENTIAL_ENTRY`: consensus is bullish, data is adequate, the setup is not extended, and risk is acceptable.
    - `WAIT_FOR_SETUP`: bullish or mixed-positive, but late/extended, conflicting, or waiting on a catalyst.

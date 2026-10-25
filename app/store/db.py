@@ -75,6 +75,15 @@ def mark_refreshed(dataset: str, key: str) -> None:
         con.execute("INSERT OR REPLACE INTO refresh_log VALUES (?,?,?)", (dataset, key, today()))
 
 
+def reset_daily_caches() -> None:
+    """Always-fresh mode: drop the once-a-day refresh gate and the volatile derived caches (option-chain snapshot,
+    shared industry score) so the next run refetches every tool live. Stored history (results, FII/DII, OI snapshots,
+    events) is NOT deleted — it is still needed for multi-day analytics and is overwritten/appended on the fresh pull."""
+    with connect() as con:
+        con.execute("DELETE FROM refresh_log")
+        con.execute("DELETE FROM kv WHERE ns IN ('option_chain', 'industry_score')")
+
+
 # ---- small JSON cache ----------------------------------------------------------------------------
 def kv_get(ns: str, key: str) -> Any | None:
     with connect() as con:

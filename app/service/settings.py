@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     events_csv: str = "data/events.csv"
     db_path: str = "data/app.db"  # SQLite: fundamentals, news, events, FII/DII, caches, run I/O
     force_refresh: bool = False  # True = ignore the "refreshed today" gate and re-fetch everything
+    always_fresh: bool = True    # every live run refetches all tools (resets the day-gate + volatile caches at run start)
     log_level: str = "INFO"
     log_dir: str = "logs"
     place_order: bool = False  # informational: nothing in this app can place an order
