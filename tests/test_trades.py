@@ -110,6 +110,22 @@ def test_limit_fill_requires_touch():
     assert bt._limit_fill([114, 113], [112, 111], 0, "long", 110, 5, 1) is None    # never traded down to 110
 
 
+def test_resolve_exit_trailing_stop_locks_profit():
+    # long, entry ~100, psr 2, initial stop 98; price runs to 110 then falls back.
+    # trail_r=1 -> stop rides 1*psr=2 behind the best high; best 112 -> dyn 110; a bar with low 109 exits ~110 as 'trail'
+    H = [100, 106, 112, 111]
+    L = [99, 104, 108, 109]
+    C = [100, 105, 111, 110]
+    out, price, idx = bt.resolve_exit(H, L, C, 0, "long", 98.0, None, trail_r=1.0, psr=2.0)
+    assert out == "trail" and price > 98.0 and idx == 3     # exited on the trail, in profit (not the initial stop)
+
+
+def test_resolve_exit_trailing_still_stops_at_initial():
+    H = [100, 101]; L = [99, 97]; C = [100, 98]             # drops straight to the initial stop
+    out, price, _ = bt.resolve_exit(H, L, C, 0, "long", 98.0, None, trail_r=1.0, psr=2.0)
+    assert out == "stop" and price == 98.0
+
+
 # --------------------------------------------------------------------------- realistic portfolio simulation
 def _noisy(drift, n=320, seed=1, s="2022-01-03"):
     """Noisy geometric series so swing pivots (and therefore demand/supply zones) actually form."""
@@ -150,3 +166,34 @@ def test_portfolio_long_only_flag():
     dates = [panel["S0"]["time"].iloc[i] for i in range(150, 260, 15)]
     recs = bt.run_trade_portfolio(panel, dates, capital=100000.0, max_bars=40, allow_short=False)
     assert all(t["bias"] == "long" for t in recs)
+
+
+def test_min_rr_filter_reduces_trades():
+    panel = {f"S{i}": _noisy(d, seed=i) for i, d in enumerate([0.0018, 0.0006, -0.0006, -0.0018, 0.001, -0.001])}
+    dates = [panel["S0"]["time"].iloc[i] for i in range(140, 300, 8)]
+    base = bt.run_trade_portfolio(panel, dates, max_bars=40)
+    strict = bt.run_trade_portfolio(panel, dates, max_bars=40, min_rr=2.0)
+    assert len(strict) <= len(base)
+    assert all(t["risk_reward"] >= 2.0 for t in strict)    # only high reward:risk setups survive the filter
+
+
+def test_target_r_sets_fixed_reward():
+    panel = {f"S{i}": _noisy(d, seed=i) for i, d in enumerate([0.0015, -0.0015, 0.0008, -0.0008])}
+    dates = [panel["S0"]["time"].iloc[i] for i in range(150, 280, 10)]
+    recs = bt.run_trade_portfolio(panel, dates, max_bars=40, target_r=2.0)
+    for t in recs:
+        if t["target"] is not None:                         # fixed 2R target: reward:risk is exactly ~2
+            assert abs(t["risk_reward"] - 2.0) < 0.05
+
+
+def test_benchmark_buy_and_hold_math():
+    # two symbols: +50% and +0% over the window -> equal-weight basket ends at +25%
+    t = pd.date_range("2022-01-03", periods=120, freq="B")
+    up = pd.DataFrame({"time": t, "open": 100.0, "high": 100.0, "low": 100.0,
+                       "close": np.linspace(100, 150, 120), "volume": 1.0})
+    flat = pd.DataFrame({"time": t, "open": 100.0, "high": 100.0, "low": 100.0,
+                         "close": np.full(120, 100.0), "volume": 1.0})
+    b = bt.benchmark_buy_and_hold({"UP": up, "FLAT": flat}, 100000.0)
+    assert b["total_return_pct"] == pytest.approx(25.0, abs=0.5) and b["max_drawdown_pct"] == pytest.approx(0.0, abs=0.01)
+    single = bt.benchmark_buy_and_hold({"UP": up, "FLAT": flat}, 100000.0, symbol="UP")
+    assert single["label"] == "UP" and single["total_return_pct"] == pytest.approx(50.0, abs=0.5)

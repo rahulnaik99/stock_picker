@@ -37,6 +37,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--entry-mode", choices=["market", "limit"], default="market", help="trade entry fill model")
     p.add_argument("--hold-cap", type=int, default=63, help="max bars to hold a simulated trade before closing at market")
     p.add_argument("--no-short", action="store_true", help="long-only trade backtest")
+    p.add_argument("--min-rr", type=float, default=0.0, help="skip trade setups whose reward:risk is below this")
+    p.add_argument("--target-r", type=float, default=0.0, help="fixed take-profit at N*risk instead of the opposite zone")
+    p.add_argument("--trail-r", type=float, default=0.0, help="trail the stop N*risk behind the best price (let winners run)")
+    p.add_argument("--benchmark", default="", help="buy&hold benchmark symbol; default = equal-weight basket of the universe")
     p.add_argument("--out", default="output/backtest", help="output path prefix (writes .md and .csv)")
     a = p.parse_args(argv)
 
@@ -74,15 +78,20 @@ def main(argv: list[str] | None = None) -> int:
         from app.backtest import trades as bttrades
 
         trs = bttrades.run_trade_portfolio(panel, dates, capital=a.capital, risk_pct=a.risk_pct, max_bars=a.hold_cap,
-                                           entry_mode=a.entry_mode, allow_short=not a.no_short)
+                                           entry_mode=a.entry_mode, allow_short=not a.no_short,
+                                           min_rr=a.min_rr, target_r=a.target_r, trail_r=a.trail_r)
         tsum = bttrades.summarize_portfolio(trs, a.capital)
-        tmd = bttrades.portfolio_to_markdown(tsum, a.risk_pct, a.entry_mode)
+        bench = bttrades.benchmark_buy_and_hold(panel, a.capital, a.benchmark or None)
+        knobs = {"min_rr": a.min_rr, "target_r": a.target_r, "trail_r": a.trail_r}
+        tmd = bttrades.portfolio_to_markdown(tsum, a.risk_pct, a.entry_mode, knobs=knobs, benchmark=bench)
         tmd_path = out.with_name(out.stem + "_trades").with_suffix(".md")
         tcsv_path = out.with_name(out.stem + "_trades").with_suffix(".csv")
+        eq_path = out.with_name(out.stem + "_equity").with_suffix(".csv")
         tmd_path.write_text(tmd)
         _write_trades_csv(trs, tcsv_path)
+        _write_equity_csv(bttrades.equity_curve_rows(trs, a.capital), bench, eq_path)
         print("\n" + tmd + "\n")
-        print(f"Wrote: {tmd_path}  |  {tcsv_path}")
+        print(f"Wrote: {tmd_path}  |  {tcsv_path}  |  {eq_path}")
     return 0
 
 
@@ -96,6 +105,21 @@ def _write_trades_csv(recs: list[dict], path: Path) -> None:
         w.writeheader()
         for r in sorted(recs, key=lambda x: (x["entry_date"], x["symbol"])):
             w.writerow({c: (r.get(c).date() if hasattr(r.get(c), "date") else r.get(c)) for c in cols})
+
+
+def _write_equity_csv(curve: list, bench: dict | None, path: Path) -> None:
+    """strategy equity (by trade-exit date) + the benchmark equity curve, each as date,label,equity rows."""
+    import csv
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["series", "date", "equity"])
+        for dt, eq in curve:
+            if dt is not None:
+                w.writerow(["strategy", dt.date() if hasattr(dt, "date") else dt, eq])
+        if bench:
+            for dt, eq in bench.get("curve", []):
+                w.writerow([f"benchmark:{bench['label']}", dt, eq])
 
 
 if __name__ == "__main__":
