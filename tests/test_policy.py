@@ -11,7 +11,7 @@ def res(agent, score, status="ok", **extra):
 
 
 def full(**scores):
-    base = dict(fundamental=5, industry=3, indicator=4, investment_trend=2, option_chain=1)
+    base = dict(fundamental=5, industry=3, indicator=4, trader=3, investment_trend=2, option_chain=1)
     base.update(scores)
     return {k: res(k, v) if v is not None else res(k, None, "unavailable") for k, v in base.items()}
 
@@ -23,15 +23,15 @@ def test_weights_sum_to_one_and_cover_all_agents():
 
 def test_weighted_score_matches_formula():
     p = policy.compute_policy(full(), CFG)
-    expected = 0.30 * 5 + 0.20 * 3 + 0.25 * 4 + 0.15 * 2 + 0.10 * 1
+    expected = 0.30 * 5 + 0.15 * 3 + 0.20 * 4 + 0.15 * 3 + 0.12 * 2 + 0.08 * 1
     assert p["policy_score"] == pytest.approx(expected, abs=0.01)
     assert p["consensus_status"] == "BULLISH_CONSENSUS" and p["data_status"] == "COMPLETE"
 
 
 def test_missing_optional_is_partial_and_not_treated_as_zero():
     p = policy.compute_policy(full(option_chain=None), CFG)
-    assert p["data_status"] == "PARTIAL" and p["data_completeness"] == pytest.approx(0.9)
-    assert p["policy_score"] == pytest.approx((0.30 * 5 + 0.20 * 3 + 0.25 * 4 + 0.15 * 2) / 0.9, abs=0.01)
+    assert p["data_status"] == "PARTIAL" and p["data_completeness"] == pytest.approx(0.92)
+    assert p["policy_score"] == pytest.approx((0.30 * 5 + 0.15 * 3 + 0.20 * 4 + 0.15 * 3 + 0.12 * 2) / 0.92, abs=0.01)
 
 
 def test_missing_required_is_insufficient():
@@ -40,13 +40,13 @@ def test_missing_required_is_insufficient():
 
 
 def test_low_completeness_is_insufficient():
-    p = policy.compute_policy(full(investment_trend=None, option_chain=None), CFG)  # 0.75 < 0.80
+    p = policy.compute_policy(full(trader=None, option_chain=None), CFG)  # 1 - 0.15 - 0.08 = 0.77 < 0.80
     assert p["data_status"] == "INSUFFICIENT"
 
 
 @pytest.mark.parametrize("scores,expected", [
     (dict(fundamental=5, industry=-2), "MIXED"),
-    (dict(fundamental=-5, industry=-2, indicator=-1, investment_trend=-3, option_chain=-4), "BEARISH_CONSENSUS"),
+    (dict(fundamental=-5, industry=-2, indicator=-1, trader=-1, investment_trend=-3, option_chain=-4), "BEARISH_CONSENSUS"),
     (dict(industry=0), "NEUTRAL_OR_MIXED"),
 ])
 def test_direction_gate(scores, expected):
@@ -72,7 +72,7 @@ def test_potential_entry_kept_when_clean():
 
 
 def test_bearish_consensus_forces_avoid():
-    p = policy.compute_policy(full(fundamental=-5, industry=-2, indicator=-1, investment_trend=-3, option_chain=-4), CFG)
+    p = policy.compute_policy(full(fundamental=-5, industry=-2, indicator=-1, trader=-1, investment_trend=-3, option_chain=-4), CFG)
     assert policy.validate_trade_status("POTENTIAL_ENTRY", p, CFG)[0] == "AVOID"
 
 
@@ -85,12 +85,12 @@ def test_finalize_records_discrepancy():
     dec = DecisionOutput(direction_view="BULLISH", proposed_score=9.5, trade_status="POTENTIAL_ENTRY", confidence=0.8, reasoning="r")
     out = policy.finalize(run_id="r", symbol="X", meta={}, as_of="2026-10-20", results=full(), decision=dec, cfg=CFG)
     assert out.score_discrepancy and out.score_discrepancy > 2 and any("differs" in x for x in out.risk_flags)
-    assert out.final_score == pytest.approx(3.5, abs=0.01)  # authoritative score is the computed one
+    assert out.final_score == pytest.approx(3.52, abs=0.01)  # authoritative score is the computed one
 
 
 def test_rank_orders_valid_first_and_never_ranks_invalid_as_zero():
     a = policy.finalize(run_id="r", symbol="A", meta={}, as_of="t", results=full(), decision=None, cfg=CFG)
-    b = policy.finalize(run_id="r", symbol="B", meta={}, as_of="t", results=full(fundamental=-8, industry=-8, indicator=-8, investment_trend=-8, option_chain=-8), decision=None, cfg=CFG)
+    b = policy.finalize(run_id="r", symbol="B", meta={}, as_of="t", results=full(fundamental=-8, industry=-8, indicator=-8, trader=-8, investment_trend=-8, option_chain=-8), decision=None, cfg=CFG)
     bad = policy.finalize(run_id="r", symbol="C", meta={}, as_of="t", results={}, decision=None, cfg=CFG, error="boom")
     ranked = policy.rank([bad, b, a])
     assert [s.symbol for s in ranked] == ["A", "B", "C"] and not ranked[-1].valid

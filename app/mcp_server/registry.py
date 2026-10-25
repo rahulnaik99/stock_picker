@@ -8,6 +8,7 @@ from app.mcp_server.tools import fundamentals, indicators, market, news, nse, ra
 TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
     "get_candles": market.get_candles,
     "get_technical_indicators": indicators.get_technical_indicators,
+    "get_demand_supply_zones": indicators.get_demand_supply_zones,
     "get_option_chain": market.get_option_chain,
     "nse_company_events": nse.nse_company_events,
     "nse_fii_dii": nse.nse_fii_dii,

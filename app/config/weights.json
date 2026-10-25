@@ -2,10 +2,11 @@
   "version": "v1-initial",
   "weights": {
     "fundamental": 0.30,
-    "industry": 0.20,
-    "indicator": 0.25,
-    "investment_trend": 0.15,
-    "option_chain": 0.10
+    "industry": 0.15,
+    "indicator": 0.20,
+    "trader": 0.15,
+    "investment_trend": 0.12,
+    "option_chain": 0.08
   },
   "required": ["fundamental", "industry", "indicator"],
   "min_data_completeness": 0.80,

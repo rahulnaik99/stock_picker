@@ -35,3 +35,27 @@ def test_trend_baseline_promoter_and_market_flow():
     assert baselines.trend_baseline(fii, rising, "stock_specific")[0] == 3.0          # +1 flow +2 promoter
     # a list 'data' (as some fakes return) must not crash -> 0 market flow
     assert baselines.trend_baseline({"data": []}, None, "market_wide_only")[0] == 0.0
+
+
+def test_trader_baseline_bull_vs_bear_and_net():
+    # bull: sitting on a strong demand zone, bullish stack, above VWAP, strong up close
+    bull_zones = {
+        "ema_stack": "bullish", "vwap_side": "above",
+        "nearest_demand": {"low": 114, "high": 116, "strength": 80, "dist_pct": -0.5},
+        "nearest_supply": {"low": 125, "high": 126, "strength": 50, "dist_pct": 8.0},
+        "price_action": {"position": "at_demand", "last3_up": True, "close_location": 0.8},
+    }
+    net, parts = baselines.trader_baseline(bull_zones)
+    # at_demand 1.5+0.8*1.5=2.7, ema 1.5, vwap 1.0, struct 0.5, close 0.5, room_above 0.5 = 6.7 bull, 0 bear
+    assert parts["bull_score"] == 6.7 and parts["bear_score"] == 0.0 and net == 6.7
+
+    # bear: rejecting a strong supply zone, bearish stack, below VWAP, weak close
+    bear_zones = {
+        "ema_stack": "bearish", "vwap_side": "below",
+        "nearest_demand": {"low": 100, "high": 102, "strength": 40, "dist_pct": -9.0},
+        "nearest_supply": {"low": 116, "high": 118, "strength": 90, "dist_pct": 0.5},
+        "price_action": {"position": "at_supply", "last3_up": False, "close_location": 0.2},
+    }
+    net2, parts2 = baselines.trader_baseline(bear_zones)
+    assert parts2["bear_score"] > parts2["bull_score"] and net2 < 0
+    assert baselines.trader_baseline(None)[0] == 0.0

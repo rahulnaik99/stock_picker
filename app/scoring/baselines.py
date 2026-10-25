@@ -103,6 +103,65 @@ def trend_baseline(fii_dii: dict[str, Any] | None, shareholding: list[dict[str, 
     return _clamp(score, -5, 5), parts
 
 
+# --------------------------------------------------------------------------- trader (demand/supply, bull & bear)
+def trader_baseline(zones: dict[str, Any] | None) -> tuple[float, dict[str, Any]]:
+    """Price-action lens: builds a BULL score (demand/EMA/VWAP/structure in the long's favour) and a BEAR score
+    (supply/EMA/VWAP/structure in the short's favour) from `get_demand_supply_zones`, then nets them.
+    `parts` keeps `bull_score` and `bear_score` so the agent can argue both sides explicitly."""
+    if not zones:
+        return 0.0, {"reason": "no zones"}
+    pa = zones.get("price_action", {}) or {}
+    nd, ns = zones.get("nearest_demand"), zones.get("nearest_supply")
+    bull: dict[str, float] = {}
+    bear: dict[str, float] = {}
+
+    # 1) Sitting on a zone: a demand touch favours a bounce (bull); a supply touch favours rejection (bear).
+    if pa.get("position") == "at_demand" and nd:
+        bull["at_demand"] = round(1.5 + (nd.get("strength", 0) / 100) * 1.5, 2)
+    elif pa.get("position") == "at_supply" and ns:
+        bear["at_supply"] = round(1.5 + (ns.get("strength", 0) / 100) * 1.5, 2)
+
+    # 2) EMA stack / VWAP side / recent structure.
+    stack = zones.get("ema_stack")
+    if stack == "bullish":
+        bull["ema_stack"] = 1.5
+    elif stack == "bearish":
+        bear["ema_stack"] = 1.5
+    side = zones.get("vwap_side")
+    if side == "above":
+        bull["vwap"] = 1.0
+    elif side == "below":
+        bear["vwap"] = 1.0
+    if pa.get("last3_up") is True:
+        bull["structure"] = 0.5
+    elif pa.get("last3_up") is False:
+        bear["structure"] = 0.5
+    loc = pa.get("close_location")
+    if isinstance(loc, (int, float)):
+        if loc >= 0.6:
+            bull["close_loc"] = 0.5
+        elif loc <= 0.4:
+            bear["close_loc"] = 0.5
+
+    # 3) Overhead room vs downside cushion: a far supply (lots of room up) is mildly bullish and vice-versa.
+    if ns and isinstance(ns.get("dist_pct"), (int, float)) and ns["dist_pct"] >= 6:
+        bull["room_above"] = 0.5
+    if nd and isinstance(nd.get("dist_pct"), (int, float)) and nd["dist_pct"] <= -6:
+        bear["air_below"] = 0.5
+
+    # 4) Multi-timeframe alignment (daily + 1h + 15m agreeing is a stronger read than a single frame).
+    mtf = zones.get("mtf_bias")
+    if mtf == "bullish_aligned":
+        bull["mtf_aligned"] = 0.5
+    elif mtf == "bearish_aligned":
+        bear["mtf_aligned"] = 0.5
+
+    bull_score = round(sum(bull.values()), 2)
+    bear_score = round(sum(bear.values()), 2)
+    net = _clamp(bull_score - bear_score)
+    return net, {"bull_score": bull_score, "bear_score": bear_score, "bull_parts": bull, "bear_parts": bear}
+
+
 # --------------------------------------------------------------------------- option chain
 def option_baseline(chain: dict[str, Any] | None) -> tuple[float, dict[str, Any]]:
     """Price/OI quadrant + PCR tilt (day-on-day)."""

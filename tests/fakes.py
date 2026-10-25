@@ -34,6 +34,17 @@ def fake_indicators(symbol: str, as_of: str | None = None) -> dict[str, Any]:
     return ok("fake", {**indicators.compute(synthetic_daily(symbol)), "candle_provider": "fake", "bars_used": 320}, symbol=symbol)
 
 
+def fake_zones(symbol: str, as_of: str | None = None, capital: float = 100000.0, risk_pct: float = 1.0) -> dict[str, Any]:
+    if symbol in BROKEN:
+        raise RuntimeError("synthetic failure")
+    z = indicators.demand_supply_zones(synthetic_daily(symbol))
+    z["mtf_bias"] = "mixed"
+    z["mtf"] = {"bias": {"1d": indicators._tf_bias(z)}, "alignment": "mixed"}
+    z["timeframes"] = {"1d": indicators._compact_tf(z)}
+    z["trade_plan"] = indicators.build_trade_plan(z, capital=capital, risk_pct=risk_pct)
+    return ok("fake", {**z, "candle_provider": "fake", "bars_used": 320}, symbol=symbol)
+
+
 def fake_events(symbol: str, days: int = 90, as_of: str | None = None) -> dict[str, Any]:
     stamp = "2026-10-15T10:00:00+05:30"
     ev = [{"event_id": f"{symbol}-res", "symbol": symbol, "exchange": "NSE", "event_type": "results", "announcement_date": "2026-10-15",
@@ -73,6 +84,7 @@ def fake_tools() -> dict[str, Any]:
     return {
         "get_candles": lambda symbol, **k: unavailable("fake", "not used"),
         "get_technical_indicators": fake_indicators,
+        "get_demand_supply_zones": fake_zones,
         "get_option_chain": chain,
         "nse_company_events": fake_events,
         "nse_fii_dii": lambda as_of=None: flows,

@@ -2,7 +2,7 @@
 
 START -> fundamental ─┐
 START -> industry ────┼─> decision -> finalize -> END
-START -> technical ───┘   (technical = indicator + investment_trend + option_chain, run concurrently)
+START -> technical ───┘   (technical = indicator + trader + investment_trend + option_chain, run concurrently)
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class StockState(TypedDict, total=False):
 
 def build_graph(client: ToolClient, cfg: dict[str, Any], ledger: EventLedger | None = None):
     ledger = ledger or EventLedger()
-    tech_weights = {k: cfg["weights"][k] for k in ("indicator", "investment_trend", "option_chain")}
+    tech_weights = {k: cfg["weights"][k] for k in ("indicator", "trader", "investment_trend", "option_chain")}
 
     async def fundamental_node(state: StockState):
         with log_context(agent="fundamental"):

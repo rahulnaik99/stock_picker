@@ -9,13 +9,14 @@ from typing import Any
 
 from app.Agents.Technical.Indicator import agent as indicator
 from app.Agents.Technical.OptionChain import agent as option_chain
+from app.Agents.Technical.Trader import agent as trader
 from app.Agents.Technical.TrendFlow import agent as trend_flow
 from app.mcp_server.client import ToolClient
 from app.schemas import AgentResult
 from app.service import progress
 from app.service.logger import log_context
 
-SPECIALISTS = {"indicator": indicator, "investment_trend": trend_flow, "option_chain": option_chain}
+SPECIALISTS = {"indicator": indicator, "trader": trader, "investment_trend": trend_flow, "option_chain": option_chain}
 
 
 async def run(symbol: str, meta: dict[str, Any], client: ToolClient, as_of: str | None, technical_weights: dict[str, float]) -> dict[str, AgentResult]:

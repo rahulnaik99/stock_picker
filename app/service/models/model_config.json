@@ -15,6 +15,10 @@
     "provider": "ollama",
     "model": "nemotron-e4b-16k"
   },
+  "trader": {
+    "provider": "ollama",
+    "model": "nemotron-e4b-16k"
+  },
   "trend_flow": {
     "provider": "ollama",
     "model": "nemotron-e4b-16k"

@@ -28,6 +28,30 @@ def test_indicators_need_enough_history():
         indicators.compute(synthetic_daily("X", n=30))
 
 
+def test_demand_supply_zones_structure_and_sides():
+    z = indicators.demand_supply_zones(trend_frame(0.003))
+    # zones are classified relative to price, scored, and the nearest on each side is surfaced
+    assert all(zz["mid"] <= z["close"] * 1.02 for zz in z["demand_zones"])
+    assert all(zz["mid"] >= z["close"] * 0.98 for zz in z["supply_zones"])
+    for zz in z["demand_zones"] + z["supply_zones"]:
+        assert zz["low"] <= zz["high"] and 0 <= zz["strength"] <= 100 and "confluence" in zz
+    assert z["ema_stack"] in ("bullish", "bearish", "mixed")
+    # a clean uptrend should read as a bullish EMA stack
+    assert z["ema_stack"] == "bullish"
+
+
+def test_demand_supply_zones_need_history():
+    with pytest.raises(ValueError):
+        indicators.demand_supply_zones(synthetic_daily("X", n=30))
+
+
+def test_get_demand_supply_zones_tool_envelope(monkeypatch):
+    monkeypatch.setattr(indicators, "fetch_candles",
+                        lambda sym, res, days, as_of=None: (trend_frame(0.003) if res == "D" else trend_frame(0.003, n=50), "fake"))
+    out = indicators.get_demand_supply_zones("SBIN")
+    assert out["status"] == "ok" and out["data"]["ema_stack"] == "bullish" and "nearest_demand" in out["data"]
+
+
 def test_vwap_session_only():
     t = pd.to_datetime(["2026-10-19 10:00", "2026-10-20 09:15", "2026-10-20 09:30"]).tz_localize(IST)
     df = pd.DataFrame({"time": t, "high": [200, 102, 104], "low": [200, 98, 100], "close": [200, 100, 102], "volume": [1000, 100, 300]})
