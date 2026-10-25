@@ -1,0 +1,9 @@
+{
+  "_comment": "Keep this current from the latest RBI MPC statement. Used only when the repo rate cannot be read from RBI press releases automatically.",
+  "repo_rate": null,
+  "crr": null,
+  "slr": null,
+  "stance": null,
+  "as_of": null,
+  "source": "https://www.rbi.org.in/ (Monetary Policy Statement)"
+}

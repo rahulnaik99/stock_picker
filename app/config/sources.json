@@ -1,0 +1,9 @@
+{
+  "fred_series": {
+    "us_fed_funds_target_upper": "DFEDTARU",
+    "us_10y_yield": "DGS10",
+    "ecb_deposit_rate": "ECBDFR",
+    "uk_sonia_overnight": "IUDSOIA",
+    "japan_policy_rate_monthly": "IRSTCB01JPM156N"
+  }
+}

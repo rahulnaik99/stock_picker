@@ -1,0 +1,29 @@
+# Gemma 3 12B tuned for the stock-scoring pipeline.
+#
+# WHY THIS FILE EXISTS
+# Pulling `gemma3:12b` straight from Ollama uses Ollama's small default context window.
+# The Fundamental agent's prompt is ~8k tokens (system prompt + evidence), so with the default
+# window the prompt is SILENTLY TRUNCATED and the model scores on partial data. Baking a larger
+# num_ctx into a named model (the same trick the existing `...-16k` qwen build uses) prevents that.
+#
+# BUILD:
+#   ollama pull gemma3:12b
+#   ollama create gemma3-12b-16k -f app/config/ollama/gemma3-12b-16k.Modelfile
+#   ollama list            # confirm gemma3-12b-16k appears
+#
+# model_config.json already points the agents at "gemma3-12b-16k".
+#
+# VRAM NOTE: 12B (q4) ~8 GB of weights + KV cache. 16k context KV cache is a few GB more.
+# If you are tight on memory, drop num_ctx to 12288 (prompts still fit) rather than running at the
+# default — a truncated prompt is worse than a slightly smaller window.
+
+FROM gemma3:12b
+
+# Large enough to hold the biggest agent prompt plus its JSON answer without truncation.
+PARAMETER num_ctx 16384
+
+# Deterministic, analytical scoring. The decision_maker overrides to 0.0 via model_config.json/the API.
+PARAMETER temperature 0.1
+
+# Cap generation; agent replies are small JSON objects.
+PARAMETER num_predict 2000

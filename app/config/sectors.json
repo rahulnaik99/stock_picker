@@ -1,0 +1,71 @@
+{
+ "_note": "Per sub_sector: what the Industry agent should focus on and which news query to use. Banks and lenders are rate/credit-cycle driven; insurers and AMCs are market/flow driven; exchanges are volume driven.",
+ "bank_private": {
+  "focus": "RBI repo rate and liquidity, NIM trend, credit and deposit growth, asset quality (GNPA/NNPA), CASA, RBI actions or penalties on the sector",
+  "uses_rates": true,
+  "news_query": "India private banks RBI credit growth NIM"
+ },
+ "bank_small_finance": {
+  "focus": "RBI rate cycle, deposit cost, microfinance and unsecured-credit stress, asset quality",
+  "uses_rates": true,
+  "news_query": "India small finance banks asset quality"
+ },
+ "bank_psu": {
+  "focus": "RBI repo rate, government recapitalisation/policy, PSU bank credit growth, treasury (bond yield) gains or losses, asset quality",
+  "uses_rates": true,
+  "news_query": "India PSU banks credit growth NPA"
+ },
+ "housing_finance": {
+  "focus": "RBI repo rate pass-through, housing demand, NHB regulation, funding cost, asset quality",
+  "uses_rates": true,
+  "news_query": "India housing finance NHB RBI"
+ },
+ "nbfc": {
+  "focus": "RBI repo rate and NBFC regulation, bank-funding cost, retail/unsecured credit stress, vehicle/gold/MSME demand, asset quality",
+  "uses_rates": true,
+  "news_query": "India NBFC RBI regulation asset quality"
+ },
+ "govt_financier": {
+  "focus": "Government capex and power/rail/renewable lending demand, funding cost, policy changes",
+  "uses_rates": true,
+  "news_query": "India PFC REC IRFC IREDA lending policy"
+ },
+ "holding_investment": {
+  "focus": "Performance of underlying subsidiaries/investments, market levels, holding-company discount",
+  "uses_rates": false,
+  "news_query": "India financial holding companies"
+ },
+ "insurance_life": {
+  "focus": "Premium growth, VNB margin, IRDAI regulation, GST/tax changes, bond yields and equity markets",
+  "uses_rates": false,
+  "news_query": "India life insurance IRDAI VNB premium growth"
+ },
+ "insurance_general": {
+  "focus": "Premium growth, combined ratio, claims, IRDAI regulation, health and motor trends",
+  "uses_rates": false,
+  "news_query": "India general insurance IRDAI claims combined ratio"
+ },
+ "amc_wealth": {
+  "focus": "SIP flows, AUM trend, equity-market level, SEBI fee/regulation changes",
+  "uses_rates": false,
+  "news_query": "India mutual fund AUM SIP flows SEBI"
+ },
+ "broker_exchange_infra": {
+  "focus": "Market volumes and turnover, F&O regulation by SEBI, retail participation, demat additions",
+  "uses_rates": false,
+  "news_query": "India capital markets volumes SEBI F&O regulation"
+ },
+ "fintech_payments": {
+  "focus": "RBI payments/lending regulation, UPI policy, user growth, unit economics",
+  "uses_rates": false,
+  "news_query": "India fintech RBI payments regulation UPI"
+ },
+ "_financials_shared": {
+  "focus": "RBI repo rate, stance and liquidity (CRR/SLR), credit and deposit growth, NIM direction, asset quality (GNPA/NNPA), RBI/SEBI/IRDAI regulation, bond yields, USD/INR, FII flows and equity-market level",
+  "news_queries": [
+   "India banks credit growth NIM RBI",
+   "India NBFC housing finance RBI regulation asset quality",
+   "India capital markets SEBI FPI flows insurance IRDAI"
+  ]
+ }
+}

@@ -1,0 +1,31 @@
+{
+  "default": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k"
+  },
+  "fundamental": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k"
+  },
+  "industry": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k"
+  },
+  "indicator": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k"
+  },
+  "trend_flow": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k"
+  },
+  "option_chain": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k"
+  },
+  "decision_maker": {
+    "provider": "ollama",
+    "model": "gemma3-12b-16k",
+    "temperature": 0.0
+  }
+}

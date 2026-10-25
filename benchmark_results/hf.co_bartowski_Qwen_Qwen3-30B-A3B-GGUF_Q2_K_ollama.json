@@ -1,0 +1,52 @@
+{
+  "name": "hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K",
+  "runtime": "ollama",
+  "model_id": "hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K",
+  "started_at_utc": "2026-10-24T15:28:47.488118+00:00",
+  "elapsed_seconds": 18.493,
+  "valid_json": true,
+  "json_parse_error": null,
+  "prompt_tokens": 1727,
+  "completion_tokens": 614,
+  "server_total_duration_ns": 18471500125,
+  "finish_reason": "stop",
+  "response": {
+    "symbol": "CANBK",
+    "score": 4,
+    "confidence": 0.7,
+    "direction": "MIXED",
+    "fundamental_summary": "CANBK's fundamentals show mixed performance. Net Interest Income (NII) is stable, but Net Profit After Tax (PAT) declined by 12.2% QoQ. NIM has been declining, and credit growth is slowing. However, provision coverage is improving, and cost to income is rising. The bank's ROA is low, but ROE is strong at 14.2%. Dividend payout is 22%.",
+    "industry_summary": "The PSU bank sector is underperforming, with a 3m return of -3.2% for the PSU Bank Index. System credit growth is 11%, and deposit growth is 9.8%. Policy rates are at 5.5%, with a neutral stance. Liquidity is surplus, and sector NPA is at 3%. NIM is compressing.",
+    "investment_trend_summary": "FII and DIIs are net buyers, but ownership changes are minimal. Mutual funds increased holdings, while FII decreased slightly. No block deals in the last 30 days.",
+    "technical_summary": "Technical indicators show mixed signals. The stock is below the 50DMA and 200DMA, with a -5.6% distance from 200DMA. RSI is at 38, suggesting oversold conditions. MACD histogram is negative, and momentum is positive over 12 months. The stock is near the 52-week low.",
+    "options_summary": "Options data shows a put-call ratio of 0.78, indicating more calls than puts. ATM IV is high at 34%, and IV percentile is 72%, suggesting elevated volatility. Put-call skew is positive, and open interest is rising.",
+    "supporting_evidence": "Fundamental: PAT decline, NIM compression. Industry: Sector underperformance, NIM compression. Technical: Oversold RSI, negative MACD. Options: High IV, put-call ratio <1.",
+    "risks": "Sector-wide underperformance, declining NIM, low ROA, high IV, potential for further NPA increases.",
+    "missing_data": [
+      "Historical EPS data",
+      "Detailed loan portfolio breakdown",
+      "Specific credit risk metrics",
+      "Detailed sector-specific credit growth by segment",
+      "Detailed liquidity coverage ratios",
+      "Detailed regulatory changes affecting banks"
+    ],
+    "decision_rationale": "The score of 4 reflects a mixed outlook. Fundamentals show declining PAT and NIM, but strong ROE and provision coverage. Industry conditions are weak, with sector underperformance. Technical indicators suggest oversold conditions but weak momentum. Options data shows elevated volatility but no clear directional bias. The combination of these factors leads to a mixed outlook. The score is based on the weighted average of the factors, with confidence reflecting the uncertainty in the data."
+  },
+  "raw_api_response": {
+    "model": "hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K",
+    "created_at": "2026-10-24T15:29:05.960591Z",
+    "message": {
+      "role": "assistant",
+      "content": "{\"symbol\": \"CANBK\", \"score\": 4, \"confidence\": 0.7, \"direction\": \"MIXED\", \"fundamental_summary\": \"CANBK's fundamentals show mixed performance. Net Interest Income (NII) is stable, but Net Profit After Tax (PAT) declined by 12.2% QoQ. NIM has been declining, and credit growth is slowing. However, provision coverage is improving, and cost to income is rising. The bank's ROA is low, but ROE is strong at 14.2%. Dividend payout is 22%.\", \"industry_summary\": \"The PSU bank sector is underperforming, with a 3m return of -3.2% for the PSU Bank Index. System credit growth is 11%, and deposit growth is 9.8%. Policy rates are at 5.5%, with a neutral stance. Liquidity is surplus, and sector NPA is at 3%. NIM is compressing.\", \"investment_trend_summary\": \"FII and DIIs are net buyers, but ownership changes are minimal. Mutual funds increased holdings, while FII decreased slightly. No block deals in the last 30 days.\", \"technical_summary\": \"Technical indicators show mixed signals. The stock is below the 50DMA and 200DMA, with a -5.6% distance from 200DMA. RSI is at 38, suggesting oversold conditions. MACD histogram is negative, and momentum is positive over 12 months. The stock is near the 52-week low.\", \"options_summary\": \"Options data shows a put-call ratio of 0.78, indicating more calls than puts. ATM IV is high at 34%, and IV percentile is 72%, suggesting elevated volatility. Put-call skew is positive, and open interest is rising.\", \"supporting_evidence\": \"Fundamental: PAT decline, NIM compression. Industry: Sector underperformance, NIM compression. Technical: Oversold RSI, negative MACD. Options: High IV, put-call ratio <1.\", \"risks\": \"Sector-wide underperformance, declining NIM, low ROA, high IV, potential for further NPA increases.\", \"missing_data\": [\"Historical EPS data\", \"Detailed loan portfolio breakdown\", \"Specific credit risk metrics\", \"Detailed sector-specific credit growth by segment\", \"Detailed liquidity coverage ratios\", \"Detailed regulatory changes affecting banks\"], \"decision_rationale\": \"The score of 4 reflects a mixed outlook. Fundamentals show declining PAT and NIM, but strong ROE and provision coverage. Industry conditions are weak, with sector underperformance. Technical indicators suggest oversold conditions but weak momentum. Options data shows elevated volatility but no clear directional bias. The combination of these factors leads to a mixed outlook. The score is based on the weighted average of the factors, with confidence reflecting the uncertainty in the data.\"}"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 18471500125,
+    "load_duration": 4679257792,
+    "prompt_eval_count": 1727,
+    "prompt_eval_cached_count": 0,
+    "prompt_eval_duration": 2370194000,
+    "eval_count": 614,
+    "eval_duration": 11397966000
+  }
+}

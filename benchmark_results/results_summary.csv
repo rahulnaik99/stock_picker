@@ -1,0 +1,7 @@
+name,runtime,model_id,elapsed_seconds,prompt_tokens,completion_tokens,approx_output_tokens_per_second,valid_json,finish_reason,error,result_file
+hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K,ollama,hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K,18.493,1727,614,33.201,True,stop,,benchmark_results/hf.co_bartowski_Qwen_Qwen3-30B-A3B-GGUF_Q2_K_ollama.json
+hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M,ollama,hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M,71.937,1997,1950,27.107,True,stop,,benchmark_results/hf.co_abenzerps_Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF_Q5_K_M_ollama.json
+hf.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF:Q4_K_M,ollama,hf.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF:Q4_K_M,295.253,1855,8192,27.746,False,length,,benchmark_results/hf.co_nvidia_NVIDIA-Nemotron-3-Nano-4B-GGUF_Q4_K_M_ollama.json
+hf.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB:Q4_K_M,ollama,hf.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB:Q4_K_M,75.484,1988,1876,24.853,True,stop,,benchmark_results/hf.co_nvidia_NVIDIA-Nemotron-3.5-Bolt-E4B-4GB_Q4_K_M_ollama.json
+qwen3-4b-instruct-16k:latest,ollama,qwen3-4b-instruct-16k:latest,52.345,1725,1370,26.172,True,stop,,benchmark_results/qwen3-4b-instruct-16k_latest_ollama.json
+OLMX model,olmx,gemma-4-12B-it-oQ4e-mtp,1.068,,,,False,,HTTPError: HTTP Error 507: Insufficient Storage,
