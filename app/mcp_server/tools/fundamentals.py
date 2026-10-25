@@ -52,7 +52,7 @@ from app.mcp_server.tools import xbrl  # noqa: E402
 from app.mcp_server.tools.common import now_ist, parse_any_dt, parse_as_of  # noqa: E402
 from app.service.settings import get_settings  # noqa: E402
 from app.store import fundamentals as fq  # noqa: E402
-from app.store.db import mark_refreshed, refreshed_today  # noqa: E402
+from app.store.db import kv_get, kv_set, mark_refreshed, refreshed_today  # noqa: E402
 
 RESULT_FRESH_DAYS = 70          # latest stored quarter younger than this -> do not fetch, use the stored data
 RESULT_LAG_DAYS = 45            # when a filing date is unknown, assume the quarter was public 45 days after period end
@@ -162,11 +162,18 @@ def merge_op_profit(nse_rows: list[dict[str, Any]], yahoo_rows: list[dict[str, A
     return notes
 
 
-def _fetch_nse_results(sym: str) -> list[dict[str, Any]]:
+def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     # NSE's corporate APIs expect a get-quote Referer for the symbol, otherwise they return a bot-check page.
-    payload = nse_tools.nse_get("/api/corporates-financial-results", {"index": "equities", "symbol": sym, "period": "Quarterly"},
-                                referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
-    return parse_nse_results(nse_tools._rows(payload), sym)
+    params = {"index": "equities", "symbol": sym, "period": "Quarterly"}
+    payload = nse_tools.nse_get("/api/corporates-financial-results", params, referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
+    raw = nse_tools._rows(payload)
+    rows = parse_nse_results(raw, sym)
+    # Diagnostics so a silent "0 rows" is debuggable from the report: did NSE return a list/dict we understood,
+    # how many raw rows, how many parsed, and what keys the first raw row actually had (to fix field mapping).
+    diag = {"endpoint": "/api/corporates-financial-results", "params": params, "payload_type": type(payload).__name__,
+            "payload_keys": (list(payload.keys())[:15] if isinstance(payload, dict) else None),
+            "raw_rows": len(raw), "parsed_rows": len(rows), "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else [])}
+    return rows, diag
 
 
 def _row_completeness(r: dict[str, Any]) -> int:
@@ -213,12 +220,16 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
         cache = "hit"
         filing: dict[str, Any] | None = None
         if live and (latest is None or age >= RESULT_FRESH_DAYS or get_settings().always_fresh or get_settings().force_refresh) and not refreshed_today("results", sym):
-            cache, nse_rows, yahoo_rows = "refreshed", [], []
-            for name, fn in (("nse", lambda: _fetch_nse_results(sym)), ("yahoo", lambda: _fetch_yahoo_results(sym, sub_sector))):
-                try:
-                    (nse_rows if name == "nse" else yahoo_rows).extend(fn())
-                except Exception as exc:  # noqa: BLE001 - one source failing must not hide the other
-                    errors.append(f"{name}: {type(exc).__name__}: {str(exc)[:160]}")
+            cache, nse_rows, yahoo_rows, nse_diag = "refreshed", [], [], {}
+            try:
+                nse_rows, nse_diag = _fetch_nse_results(sym)
+            except Exception as exc:  # noqa: BLE001 - one source failing must not hide the other
+                nse_diag = {"error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+                errors.append(f"nse: {nse_diag['error']}")
+            try:
+                yahoo_rows = _fetch_yahoo_results(sym, sub_sector)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"yahoo: {type(exc).__name__}: {str(exc)[:160]}")
             errors.extend(merge_op_profit(nse_rows, yahoo_rows))
             if nse_rows:                        # provenance of the newest authoritative filing (for the agent to cite)
                 newest = max(nse_rows, key=lambda r: r["period_end"])
@@ -233,13 +244,23 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
             if nse_rows or yahoo_rows:
                 fq.upsert_quarters(nse_rows + yahoo_rows)
                 mark_refreshed("results", sym)      # a day with zero rows is retried on the next load
+            # Persist the fetch outcome so it is visible in the report even when a later call is a cache-hit
+            # (the agent's own call usually hits cache after the pre-run refresh job did the real fetch).
+            kv_set("results_fetch", sym, {"fetched_at": now_ist().isoformat(timespec="seconds"), "nse": nse_diag,
+                                          "yahoo_rows": len(yahoo_rows), "source_errors": errors, "latest_filing": filing})
         rows, used, basis = fq.pick_series(sym, t.date())
+        # Surface the last fetch's diagnostics + what is actually stored, on every call (incl. cache-hits).
+        last_fetch = kv_get("results_fetch", sym)
+        if filing is None and last_fetch:
+            filing = last_fetch.get("latest_filing")
+        if not errors and last_fetch:
+            errors = last_fetch.get("source_errors") or []
         if not live:                      # backtest: keep only quarters that were public by T (live runs just fetched what is public now)
             rows = [r for r in rows if _public_on(r) <= t.date()]
         if not rows:
             return unavailable(src, f"no stored quarterly results for {sym}" + (f" ({'; '.join(errors)})" if errors else "")
                                + ". NSE/Yahoo were not reachable: load your own history with `python -m app.jobs.import_results file.csv`.",
-                               cache=cache, source_errors=errors)
+                               cache=cache, source_errors=errors, last_fetch=last_fetch)
         slim = [{k: r.get(k) for k in ("period_end", "revenue", "op_profit", "op_kind", "pbt", "pat", "eps", "reported_on")} for r in rows]
         # Honest label: only describe the operating-profit line when the series actually carries op_profit values.
         present_kinds = sorted({r.get("op_kind") for r in rows if r.get("op_profit") is not None and r.get("op_kind")})
@@ -249,7 +270,8 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
             expected = "PPOP (approx.)" if is_lender(sub_sector) else "EBITDA"
             op_kind_label = f"unavailable (no {expected} in this series: NSE summary has no operating-profit line and no Yahoo match)"
         return ok(src, {"series_source": used, "basis": basis, "unit": "INR crore (EPS in INR)", "quarters": slim,
-                        "latest_filing": filing, "metrics": fq.compute_metrics(rows)},
+                        "latest_filing": filing, "source_counts": fq.source_counts(sym), "last_fetch": last_fetch,
+                        "metrics": fq.compute_metrics(rows)},
                   symbol=sym, cache=cache, latest_period=rows[-1]["period_end"], age_days=(today - date.fromisoformat(rows[-1]["period_end"])).days,
                   source_errors=errors, operating_profit_kind=op_kind_label)
     except Exception as exc:  # noqa: BLE001

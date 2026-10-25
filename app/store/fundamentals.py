@@ -38,6 +38,14 @@ def latest_period_end(symbol: str, as_of: date) -> date | None:
     return date.fromisoformat(row["m"]) if row and row["m"] else None
 
 
+def source_counts(symbol: str) -> list[dict[str, Any]]:
+    """How many stored quarters exist per (source, basis) — so a report can see whether NSE rows ever landed."""
+    with connect() as con:
+        rows = con.execute("SELECT source, basis, COUNT(*) n, MAX(period_end) latest FROM fundamentals_q WHERE symbol=? GROUP BY source, basis",
+                           (symbol,)).fetchall()
+    return [{"source": r["source"], "basis": r["basis"], "n": r["n"], "latest": r["latest"]} for r in rows]
+
+
 def pick_series(symbol: str, as_of: date) -> tuple[list[dict[str, Any]], str | None, str | None]:
     """Return (rows oldest->newest, source, basis). Consolidated preferred; one source only."""
     with connect() as con:

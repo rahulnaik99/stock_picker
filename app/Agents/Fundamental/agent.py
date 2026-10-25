@@ -74,6 +74,8 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         data = qres["data"]
         qr = {**data, "operating_profit_kind": qres.get("operating_profit_kind"),
               "latest_period": qres.get("latest_period"), "source_errors": qres.get("source_errors")}
+        qr.pop("last_fetch", None)          # fetch diagnostics stay in the raw tool trace (report), not the LLM prompt
+        qr.pop("source_counts", None)
         filing = data.get("latest_filing")
         if filing:
             xd = filing.get("xbrl")

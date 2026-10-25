@@ -143,7 +143,7 @@ def test_results_younger_than_70_days_use_stored_data(monkeypatch):
 def test_always_fresh_refetches_even_when_under_70_days(monkeypatch):
     fq.upsert_quarters([qrow("SBIN", 40, 120)])          # data is fresh (<70 days)
     calls = []
-    monkeypatch.setattr(fundamentals, "_fetch_nse_results", lambda sym: calls.append("nse") or [qrow(sym, 35, 121)])
+    monkeypatch.setattr(fundamentals, "_fetch_nse_results", lambda sym: (calls.append("nse") or [qrow(sym, 35, 121)], {}))
     monkeypatch.setattr(fundamentals, "_fetch_yahoo_results", lambda sym, sub: calls.append("yahoo") or [])
     out = fundamentals.quarterly_fundamentals("SBIN")     # always_fresh default True -> refetch anyway
     assert out["cache"] == "refreshed" and "nse" in calls
@@ -163,7 +163,7 @@ def test_reset_daily_caches_clears_gate_and_volatile_kv():
 def test_results_older_than_70_days_fetch_once_then_gate(monkeypatch):
     fq.upsert_quarters([qrow("SBIN", 120, 100)])
     calls = []
-    monkeypatch.setattr(fundamentals, "_fetch_nse_results", lambda sym: calls.append("nse") or [qrow(sym, 100, 101)])
+    monkeypatch.setattr(fundamentals, "_fetch_nse_results", lambda sym: (calls.append("nse") or [qrow(sym, 100, 101)], {}))
     monkeypatch.setattr(fundamentals, "_fetch_yahoo_results", lambda sym, sub: calls.append("yahoo") or [])
     first = fundamentals.quarterly_fundamentals("SBIN")
     assert first["cache"] == "refreshed" and calls == ["nse", "yahoo"]
@@ -181,6 +181,17 @@ def test_results_fetch_failure_is_reported_not_zero(monkeypatch):
     monkeypatch.setattr(fundamentals, "_fetch_yahoo_results", lambda s, sub: [])
     out = fundamentals.quarterly_fundamentals("SBIN")
     assert out["status"] == "unavailable" and "NSE blocked" in out["message"] and "import_results" in out["message"]
+
+
+def test_results_fetch_diagnostics_persist_on_cache_hit(monkeypatch):
+    diag = {"raw_rows": 8, "parsed_rows": 1, "sample_raw_keys": ["to_date", "income", "proLossAftTax"]}
+    monkeypatch.setattr(fundamentals, "_fetch_nse_results", lambda sym: ([qrow(sym, 20, 100, reported_on="2026-10-14")], diag))
+    monkeypatch.setattr(fundamentals, "_fetch_yahoo_results", lambda sym, sub: [])
+    first = fundamentals.quarterly_fundamentals("SBIN")
+    assert first["cache"] == "refreshed" and first["data"]["last_fetch"]["nse"]["raw_rows"] == 8
+    second = fundamentals.quarterly_fundamentals("SBIN")   # cache hit -> diagnostics must STILL be visible in the report
+    assert second["cache"] == "hit" and second["data"]["last_fetch"]["nse"]["parsed_rows"] == 1
+    assert any(s["source"] == "nse" for s in second["data"]["source_counts"])
 
 
 def test_results_point_in_time_excludes_unannounced_quarters():
