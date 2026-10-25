@@ -53,6 +53,25 @@ def test_parse_nse_results_real_schema_and_provenance():
     assert r["audited"] == "Un-Audited" and r["xbrl_url"].endswith("CANBK.xml")
 
 
+def test_nse_filings_extracts_metadata_and_links():
+    raw = [{"toDate": "30-Sep-2026", "consolidated": "Consolidated", "audited": "Un-Audited", "broadCastDate": "14-Oct-2026 17:40",
+            "xbrl": "https://nsearchives.nseindia.com/corporate/xbrl/CANBK.xml", "resultDetailedDataLink": "/api/corporates-financial-results-data?symbol=CANBK"},
+           {"toDate": "30-Jun-2026", "consolidated": "Non-Consolidated", "xbrl": "/corporate/xbrl/j.xml", "resultDetailedDataLink": "https://www.nseindia.com/x"}]
+    fs = fundamentals.nse_filings(raw, "CANBK")
+    assert len(fs) == 2
+    assert fs[0]["period_end"] == "2026-09-30" and fs[0]["basis"] == "consolidated" and fs[0]["reported_on"] == "2026-10-14"
+    assert fs[0]["audited"] == "Un-Audited" and fs[0]["xbrl_url"].endswith("CANBK.xml")
+    assert fs[0]["detail_link"].startswith("https://www.nseindia.com/api/corporates-financial-results-data")
+    assert fs[1]["basis"] == "standalone" and fs[1]["xbrl_url"] == "https://www.nseindia.com/corporate/xbrl/j.xml"
+
+
+def test_detail_rows_normalises_shapes():
+    assert fundamentals._detail_rows([{"a": 1}]) == [{"a": 1}]
+    assert fundamentals._detail_rows({"data": [{"a": 1}]}) == [{"a": 1}]
+    assert fundamentals._detail_rows({"resultBody": {"a": 1}}) == [{"a": 1}]
+    assert fundamentals._detail_rows({"income": "1"}) == [{"income": "1"}]
+
+
 def test_parse_yahoo_statement_lender_ppop_and_ebitda():
     cols = [pd.Timestamp("2026-09-30"), pd.Timestamp("2026-06-30")]
     df = pd.DataFrame({cols[0]: [3.1e11, 1.0e11, 7e10, 2e11, 41.0, 2e10], cols[1]: [3.0e11, 0.9e11, 6e10, 1.9e11, 38.0, 1e10]},

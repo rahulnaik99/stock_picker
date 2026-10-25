@@ -68,6 +68,8 @@ _NSE_KEYS = {
     "eps": ("reDilEPS", "reBasicEPS", "basicEPS", "dilutedEPS", "eps", "dilEPS", "re_dil_eps"),
 }
 _NSE_ATTACH = ("xbrl_attachment", "xbrl", "naVal", "na_attachment", "attachment")
+_NSE_DETAIL_KEYS = ("resultDetailedDataLink", "resultdetaileddatalink", "detailLink", "detailedDataLink")
+NSE_DETAIL_MAX = 16     # cap detail-link fetches per symbol per run
 
 
 def is_lender(sub_sector: str | None) -> bool:
@@ -162,17 +164,81 @@ def merge_op_profit(nse_rows: list[dict[str, Any]], yahoo_rows: list[dict[str, A
     return notes
 
 
+def _abs_nse_url(link: Any) -> str | None:
+    if not link or not isinstance(link, str):
+        return None
+    if link.startswith("http"):
+        return link
+    return f"{nse_tools.BASE}{link if link.startswith('/') else '/' + link}"
+
+
+def nse_filings(raw: list[dict[str, Any]], symbol: str) -> list[dict[str, Any]]:
+    """Parse the financial-results LIST (metadata only — NO numbers) into filing records: period_end, basis,
+    reported_on, audited, and the per-filing `xbrl_url` + `detail_link` that actually carry the figures."""
+    out = []
+    for r in raw:
+        end = parse_any_dt(_first(r, _NSE_KEYS["period_end"]))
+        if end is None:
+            continue
+        rep = parse_any_dt(_first(r, _NSE_KEYS["reported_on"]))
+        basis = "standalone" if str(r.get("consolidated", "")).lower().startswith(("non", "stand")) else "consolidated"
+        out.append({"symbol": symbol, "period_end": end.date().isoformat(), "basis": basis,
+                    "reported_on": rep.date().isoformat() if rep else None,
+                    "audited": (str(_first(r, ("audited", "audit")) or "").strip() or None),
+                    "xbrl_url": _abs_nse_url(_first(r, _NSE_ATTACH)),
+                    "detail_link": _abs_nse_url(_first(r, _NSE_DETAIL_KEYS))})
+    return out
+
+
+def _detail_rows(d: Any) -> list[dict[str, Any]]:
+    """Normalise a resultDetailedDataLink response (list, or dict possibly wrapping data/resultBody/rows) to row dicts."""
+    if isinstance(d, list):
+        return [x for x in d if isinstance(x, dict)]
+    if isinstance(d, dict):
+        inner = d.get("data") or d.get("resultBody") or d.get("rows")
+        if isinstance(inner, list):
+            return [x for x in inner if isinstance(x, dict)]
+        if isinstance(inner, dict):
+            return [inner]
+        return [d]
+    return []
+
+
 def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    # NSE's corporate APIs expect a get-quote Referer for the symbol, otherwise they return a bot-check page.
+    # The LIST endpoint returns filing metadata only; the numbers live behind each row's resultDetailedDataLink,
+    # and the bank KPIs behind its xbrl URL. So: parse the list, then fetch detail links for the recent quarters.
+    ref = f"{nse_tools.BASE}/get-quote/equity/{sym}"
     params = {"index": "equities", "symbol": sym, "period": "Quarterly"}
-    payload = nse_tools.nse_get("/api/corporates-financial-results", params, referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
+    payload = nse_tools.nse_get("/api/corporates-financial-results", params, referer=ref)
     raw = nse_tools._rows(payload)
-    rows = parse_nse_results(raw, sym)
-    # Diagnostics so a silent "0 rows" is debuggable from the report: did NSE return a list/dict we understood,
-    # how many raw rows, how many parsed, and what keys the first raw row actually had (to fix field mapping).
-    diag = {"endpoint": "/api/corporates-financial-results", "params": params, "payload_type": type(payload).__name__,
-            "payload_keys": (list(payload.keys())[:15] if isinstance(payload, dict) else None),
-            "raw_rows": len(raw), "parsed_rows": len(rows), "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else [])}
+    filings = nse_filings(raw, sym)
+    by_recent = sorted(filings, key=lambda f: f["period_end"], reverse=True)
+    cons = [f for f in by_recent if f["basis"] == "consolidated" and f.get("detail_link")]
+    targets = (cons or [f for f in by_recent if f.get("detail_link")])[:NSE_DETAIL_MAX]
+
+    rows: list[dict[str, Any]] = []
+    detail = {"fetched": 0, "parsed": 0, "sample_detail_keys": [], "errors": []}
+    for f in targets:
+        try:
+            d = nse_tools.nse_get_url(f["detail_link"], referer=ref)
+            detail["fetched"] += 1
+            drows = _detail_rows(d)
+            if drows and not detail["sample_detail_keys"]:
+                detail["sample_detail_keys"] = sorted(drows[0].keys())[:30]
+            for dr in drows:   # detail JSON may omit period/basis/date -> inject from the list row so parse can anchor
+                dr.setdefault("toDate", f["period_end"])
+                dr.setdefault("consolidated", "Consolidated" if f["basis"] == "consolidated" else "Non-Consolidated")
+                dr.setdefault("broadcastDate", f.get("reported_on"))
+            rows.extend(parse_nse_results(drows, sym))
+        except Exception as exc:  # noqa: BLE001 - one bad detail link must not abort the rest
+            detail["errors"].append(f"{f['period_end']}: {type(exc).__name__}: {str(exc)[:120]}")
+    detail["parsed"] = len(rows)
+
+    latest = cons[0] if cons else (by_recent[0] if by_recent else None)
+    diag = {"endpoint": "/api/corporates-financial-results", "payload_type": type(payload).__name__,
+            "list_rows": len(raw), "filings_found": len(filings), "parsed_rows": len(rows),
+            "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else []), "detail": detail,
+            "latest_filing": ({k: latest.get(k) for k in ("period_end", "basis", "reported_on", "audited", "xbrl_url")} if latest else None)}
     return rows, diag
 
 
@@ -231,16 +297,18 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"yahoo: {type(exc).__name__}: {str(exc)[:160]}")
             errors.extend(merge_op_profit(nse_rows, yahoo_rows))
-            if nse_rows:                        # provenance of the newest authoritative filing (for the agent to cite)
+            # Provenance comes from the LIST metadata (it carries the xbrl_url); fall back to the newest parsed row.
+            filing = nse_diag.get("latest_filing")
+            if filing is None and nse_rows:
                 newest = max(nse_rows, key=lambda r: r["period_end"])
                 filing = {"period_end": newest["period_end"], "reported_on": newest.get("reported_on"),
                           "audited": newest.get("audited"), "basis": newest["basis"], "xbrl_url": newest.get("xbrl_url")}
-                # Bank/lender KPIs (GNPA/NNPA/CRAR/NII) live in the XBRL, not the summary. Fetch+parse with full
-                # diagnostics; any failure is captured in `filing["xbrl"]`, never raised, so it shows in the report.
-                if is_lender(sub_sector) and filing.get("xbrl_url"):
-                    filing["xbrl"] = xbrl.fetch_bank_kpis(filing["xbrl_url"], referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
-                    if filing["xbrl"].get("status") not in ("ok", "partial"):
-                        errors.append(f"xbrl: {filing['xbrl'].get('status')} ({filing['xbrl'].get('error') or 'no KPIs matched'})")
+            if filing and is_lender(sub_sector) and filing.get("xbrl_url"):
+                # Bank/lender KPIs (GNPA/NNPA/CRAR/NII) live in the XBRL; fetch+parse with full diagnostics, never raise.
+                filing = dict(filing)
+                filing["xbrl"] = xbrl.fetch_bank_kpis(filing["xbrl_url"], referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
+                if filing["xbrl"].get("status") not in ("ok", "partial"):
+                    errors.append(f"xbrl: {filing['xbrl'].get('status')} ({filing['xbrl'].get('error') or 'no KPIs matched'})")
             if nse_rows or yahoo_rows:
                 fq.upsert_quarters(nse_rows + yahoo_rows)
                 mark_refreshed("results", sym)      # a day with zero rows is retried on the next load

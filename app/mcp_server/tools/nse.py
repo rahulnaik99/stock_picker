@@ -94,6 +94,20 @@ def _rows(payload: Any) -> list[dict[str, Any]]:
     return [r for r in payload if isinstance(r, dict)] if isinstance(payload, list) else []
 
 
+def nse_get_url(url: str, referer: str | None = None) -> Any:
+    """GET an absolute NSE URL (e.g. a resultDetailedDataLink) and return parsed JSON."""
+    headers = {"Referer": referer} if referer else None
+    resp = http_get(_get_session(), url, headers=headers)
+    if resp.status_code in (401, 403):
+        raise SourceError("NSE blocked the request (HTTP %s). Set NSE_COOKIES in .env from your browser." % resp.status_code)
+    if not resp.ok:
+        raise SourceError(f"NSE HTTP {resp.status_code} for {url}")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise SourceError("NSE returned a non-JSON page (bot check). Set NSE_COOKIES in .env.") from exc
+
+
 def nse_get_bytes(url: str, referer: str | None = None) -> tuple[bytes, int]:
     """Fetch a raw document (e.g. an XBRL file on nsearchives) through the warmed NSE session. Returns (content, http_status)."""
     headers = {"Referer": referer, "Accept": "application/xml, text/xml, */*"} if referer else {"Accept": "application/xml, text/xml, */*"}
