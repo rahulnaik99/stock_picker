@@ -69,7 +69,7 @@ _NSE_KEYS = {
 }
 _NSE_ATTACH = ("xbrl_attachment", "xbrl", "naVal", "na_attachment", "attachment")
 _NSE_DETAIL_KEYS = ("resultDetailedDataLink", "resultdetaileddatalink", "detailLink", "detailedDataLink")
-NSE_DETAIL_MAX = 16     # cap detail-link fetches per symbol per run
+NSE_XBRL_MAX = 12       # cap XBRL fetches per symbol per run (one per recent quarter)
 
 
 def is_lender(sub_sector: str | None) -> bool:
@@ -205,40 +205,45 @@ def _detail_rows(d: Any) -> list[dict[str, Any]]:
 
 
 def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    # The LIST endpoint returns filing metadata only; the numbers live behind each row's resultDetailedDataLink,
-    # and the bank KPIs behind its xbrl URL. So: parse the list, then fetch detail links for the recent quarters.
+    # The LIST endpoint returns filing metadata + per-filing links. The numbers live in each filing's XBRL (the
+    # summary "detail link" endpoint is bot-blocked), so we build the whole series from the XBRL: P&L + bank KPIs.
     ref = f"{nse_tools.BASE}/get-quote/equity/{sym}"
     params = {"index": "equities", "symbol": sym, "period": "Quarterly"}
     payload = nse_tools.nse_get("/api/corporates-financial-results", params, referer=ref)
     raw = nse_tools._rows(payload)
     filings = nse_filings(raw, sym)
     by_recent = sorted(filings, key=lambda f: f["period_end"], reverse=True)
-    cons = [f for f in by_recent if f["basis"] == "consolidated" and f.get("detail_link")]
-    targets = (cons or [f for f in by_recent if f.get("detail_link")])[:NSE_DETAIL_MAX]
+    cons = [f for f in by_recent if f["basis"] == "consolidated" and f.get("xbrl_url")]
+    targets = (cons or [f for f in by_recent if f.get("xbrl_url")])[:NSE_XBRL_MAX]
 
     rows: list[dict[str, Any]] = []
-    detail = {"fetched": 0, "parsed": 0, "sample_detail_keys": [], "errors": []}
-    for f in targets:
-        try:
-            d = nse_tools.nse_get_url(f["detail_link"], referer=ref)
-            detail["fetched"] += 1
-            drows = _detail_rows(d)
-            if drows and not detail["sample_detail_keys"]:
-                detail["sample_detail_keys"] = sorted(drows[0].keys())[:30]
-            for dr in drows:   # detail JSON may omit period/basis/date -> inject from the list row so parse can anchor
-                dr.setdefault("toDate", f["period_end"])
-                dr.setdefault("consolidated", "Consolidated" if f["basis"] == "consolidated" else "Non-Consolidated")
-                dr.setdefault("broadcastDate", f.get("reported_on"))
-            rows.extend(parse_nse_results(drows, sym))
-        except Exception as exc:  # noqa: BLE001 - one bad detail link must not abort the rest
-            detail["errors"].append(f"{f['period_end']}: {type(exc).__name__}: {str(exc)[:120]}")
-    detail["parsed"] = len(rows)
+    xd = {"fetched": 0, "parsed_rows": 0, "latest_status": None, "sample_tags": [], "errors": []}
+    latest_xbrl: dict[str, Any] | None = None
+    for i, f in enumerate(targets):
+        xb = xbrl.fetch_bank_kpis(f["xbrl_url"], referer=ref)
+        if i == 0:
+            latest_xbrl, xd["latest_status"], xd["sample_tags"] = xb, xb.get("status"), (xb.get("sample_tags") or [])
+        if xb.get("status") in ("ok", "partial"):
+            xd["fetched"] += 1
+            k = xb.get("kpis") or {}
+            if k.get("pat") is not None or k.get("total_income") is not None:   # a usable P&L row (values already in crore)
+                rows.append({"symbol": sym, "period_end": f["period_end"], "basis": f["basis"], "source": "nse",
+                             "revenue": k.get("total_income"), "op_profit": k.get("op_profit"),
+                             "op_kind": "PPOP" if k.get("op_profit") is not None else None,
+                             "pbt": k.get("pbt"), "pat": k.get("pat"), "eps": k.get("eps"), "reported_on": f.get("reported_on")})
+        else:
+            xd["errors"].append(f"{f['period_end']}: {xb.get('error') or xb.get('status')}")
+    xd["parsed_rows"] = len(rows)
 
     latest = cons[0] if cons else (by_recent[0] if by_recent else None)
+    lf = None
+    if latest:
+        lf = {k: latest.get(k) for k in ("period_end", "basis", "reported_on", "audited", "xbrl_url")}
+        if latest_xbrl is not None:
+            lf["xbrl"] = latest_xbrl   # already fetched; the caller must not re-fetch
     diag = {"endpoint": "/api/corporates-financial-results", "payload_type": type(payload).__name__,
             "list_rows": len(raw), "filings_found": len(filings), "parsed_rows": len(rows),
-            "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else []), "detail": detail,
-            "latest_filing": ({k: latest.get(k) for k in ("period_end", "basis", "reported_on", "audited", "xbrl_url")} if latest else None)}
+            "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else []), "xbrl": xd, "latest_filing": lf}
     return rows, diag
 
 
@@ -303,12 +308,13 @@ def quarterly_fundamentals(symbol: str, as_of: str | None = None, sub_sector: st
                 newest = max(nse_rows, key=lambda r: r["period_end"])
                 filing = {"period_end": newest["period_end"], "reported_on": newest.get("reported_on"),
                           "audited": newest.get("audited"), "basis": newest["basis"], "xbrl_url": newest.get("xbrl_url")}
-            if filing and is_lender(sub_sector) and filing.get("xbrl_url"):
-                # Bank/lender KPIs (GNPA/NNPA/CRAR/NII) live in the XBRL; fetch+parse with full diagnostics, never raise.
+            if filing and is_lender(sub_sector) and filing.get("xbrl_url") and "xbrl" not in filing:
+                # KPIs live in the XBRL; _fetch_nse_results usually already attached the newest one, so only
+                # fetch here if it didn't. Failures are captured in filing["xbrl"], never raised.
                 filing = dict(filing)
                 filing["xbrl"] = xbrl.fetch_bank_kpis(filing["xbrl_url"], referer=f"{nse_tools.BASE}/get-quote/equity/{sym}")
-                if filing["xbrl"].get("status") not in ("ok", "partial"):
-                    errors.append(f"xbrl: {filing['xbrl'].get('status')} ({filing['xbrl'].get('error') or 'no KPIs matched'})")
+            if filing and filing.get("xbrl") and filing["xbrl"].get("status") not in ("ok", "partial"):
+                errors.append(f"xbrl: {filing['xbrl'].get('status')} ({filing['xbrl'].get('error') or 'no KPIs matched'})")
             if nse_rows or yahoo_rows:
                 fq.upsert_quarters(nse_rows + yahoo_rows)
                 mark_refreshed("results", sym)      # a day with zero rows is retried on the next load
