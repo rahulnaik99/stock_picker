@@ -1,0 +1,80 @@
+[
+  {
+    "name": "hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K",
+    "runtime": "ollama",
+    "model_id": "hf.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF:Q2_K",
+    "elapsed_seconds": 18.493,
+    "prompt_tokens": 1727,
+    "completion_tokens": 614,
+    "approx_output_tokens_per_second": 33.201,
+    "valid_json": true,
+    "finish_reason": "stop",
+    "error": null,
+    "result_file": "benchmark_results/hf.co_bartowski_Qwen_Qwen3-30B-A3B-GGUF_Q2_K_ollama.json"
+  },
+  {
+    "name": "hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M",
+    "runtime": "ollama",
+    "model_id": "hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M",
+    "elapsed_seconds": 71.937,
+    "prompt_tokens": 1997,
+    "completion_tokens": 1950,
+    "approx_output_tokens_per_second": 27.107,
+    "valid_json": true,
+    "finish_reason": "stop",
+    "error": null,
+    "result_file": "benchmark_results/hf.co_abenzerps_Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF_Q5_K_M_ollama.json"
+  },
+  {
+    "name": "hf.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF:Q4_K_M",
+    "runtime": "ollama",
+    "model_id": "hf.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF:Q4_K_M",
+    "elapsed_seconds": 295.253,
+    "prompt_tokens": 1855,
+    "completion_tokens": 8192,
+    "approx_output_tokens_per_second": 27.746,
+    "valid_json": false,
+    "finish_reason": "length",
+    "error": null,
+    "result_file": "benchmark_results/hf.co_nvidia_NVIDIA-Nemotron-3-Nano-4B-GGUF_Q4_K_M_ollama.json"
+  },
+  {
+    "name": "hf.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB:Q4_K_M",
+    "runtime": "ollama",
+    "model_id": "hf.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB:Q4_K_M",
+    "elapsed_seconds": 75.484,
+    "prompt_tokens": 1988,
+    "completion_tokens": 1876,
+    "approx_output_tokens_per_second": 24.853,
+    "valid_json": true,
+    "finish_reason": "stop",
+    "error": null,
+    "result_file": "benchmark_results/hf.co_nvidia_NVIDIA-Nemotron-3.5-Bolt-E4B-4GB_Q4_K_M_ollama.json"
+  },
+  {
+    "name": "qwen3-4b-instruct-16k:latest",
+    "runtime": "ollama",
+    "model_id": "qwen3-4b-instruct-16k:latest",
+    "elapsed_seconds": 52.345,
+    "prompt_tokens": 1725,
+    "completion_tokens": 1370,
+    "approx_output_tokens_per_second": 26.172,
+    "valid_json": true,
+    "finish_reason": "stop",
+    "error": null,
+    "result_file": "benchmark_results/qwen3-4b-instruct-16k_latest_ollama.json"
+  },
+  {
+    "name": "OLMX model",
+    "runtime": "olmx",
+    "model_id": "gemma-4-12B-it-oQ4e-mtp",
+    "elapsed_seconds": 1.068,
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "approx_output_tokens_per_second": null,
+    "valid_json": false,
+    "finish_reason": null,
+    "error": "HTTPError: HTTP Error 507: Insufficient Storage",
+    "result_file": null
+  }
+]

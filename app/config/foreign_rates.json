@@ -1,0 +1,11 @@
+{
+  "_note": "FRED series for foreign policy/market rates. Series codes and freshness must be verified; the tool reports the last observation date and flags stale series.",
+  "series": [
+    {"id": "DFF",   "name": "US Fed funds effective rate (daily)", "max_age_days": 10},
+    {"id": "DGS10", "name": "US 10-year Treasury yield (daily)", "max_age_days": 10},
+    {"id": "ECBDFR", "name": "ECB deposit facility rate", "max_age_days": 45},
+    {"id": "IRSTCI01GBM156N", "name": "UK immediate (call money) rate, monthly", "max_age_days": 90},
+    {"id": "IRSTCI01JPM156N", "name": "Japan immediate (call money) rate, monthly", "max_age_days": 90}
+  ],
+  "market_tickers": {"USDINR": "INR=X", "INDIA_VIX": "^INDIAVIX", "US_DOLLAR_INDEX": "DX-Y.NYB", "BRENT": "BZ=F", "NIFTY_BANK": "^NSEBANK", "NIFTY_50": "^NSEI"}
+}

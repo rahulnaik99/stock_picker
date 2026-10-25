@@ -1,0 +1,99 @@
+symbol,company_name,isin,sub_sector,exchange
+360ONE,360 ONE WAM Ltd.,INE466L01038,amc_wealth,NSE
+AUBANK,AU Small Finance Bank Ltd.,INE949L01017,bank_small_finance,NSE
+AADHARHFC,Aadhar Housing Finance Ltd.,INE883F01010,housing_finance,NSE
+AAVAS,Aavas Financiers Ltd.,INE216P01012,housing_finance,NSE
+ABCAPITAL,Aditya Birla Capital Ltd.,INE674K01013,nbfc,NSE
+ABSLAMC,Aditya Birla Sun Life AMC Ltd.,INE404A01024,amc_wealth,NSE
+ANANDRATHI,Anand Rathi Wealth Ltd.,INE463V01026,amc_wealth,NSE
+ANGELONE,Angel One Ltd.,INE732I01021,broker_exchange_infra,NSE
+APTUS,Aptus Value Housing Finance India Ltd.,INE852O01025,housing_finance,NSE
+AIIL,Authum Investment & Infrastructure Ltd.,INE206F01022,holding_investment,NSE
+AXISBANK,Axis Bank Ltd.,INE238A01034,bank_private,NSE
+BSE,BSE Ltd.,INE118H01025,broker_exchange_infra,NSE
+BAJFINANCE,Bajaj Finance Ltd.,INE296A01032,nbfc,NSE
+BAJAJFINSV,Bajaj Finserv Ltd.,INE918I01026,holding_investment,NSE
+BAJAJHLDNG,Bajaj Holdings & Investment Ltd.,INE118A01012,holding_investment,NSE
+BAJAJHFL,Bajaj Housing Finance Ltd.,INE377Y01014,housing_finance,NSE
+BANDHANBNK,Bandhan Bank Ltd.,INE545U01014,bank_private,NSE
+BANKBARODA,Bank of Baroda,INE028A01039,bank_psu,NSE
+BANKINDIA,Bank of India,INE084A01016,bank_psu,NSE
+MAHABANK,Bank of Maharashtra,INE457A01014,bank_psu,NSE
+GROWW,Billionbrains Garage Ventures Ltd.,INE0HOQ01053,broker_exchange_infra,NSE
+CRISIL,CRISIL Ltd.,INE007A01025,broker_exchange_infra,NSE
+CANFINHOME,Can Fin Homes Ltd.,INE477A01020,housing_finance,NSE
+CANBK,Canara Bank,INE476A01022,bank_psu,NSE
+CANHLIFE,Canara HSBC Life Insurance Company Ltd.,INE01TY01017,insurance_life,NSE
+CGCL,Capri Global Capital Ltd.,INE180C01042,nbfc,NSE
+CENTRALBK,Central Bank of India,INE483A01010,bank_psu,NSE
+CDSL,Central Depository Services (India) Ltd.,INE736A01011,broker_exchange_infra,NSE
+CHOICEIN,Choice International Ltd.,INE102B01014,broker_exchange_infra,NSE
+CHOLAHLDNG,Cholamandalam Financial Holdings Ltd.,INE149A01033,holding_investment,NSE
+CHOLAFIN,Cholamandalam Investment and Finance Company Ltd.,INE121A01024,nbfc,NSE
+CUB,City Union Bank Ltd.,INE491A01021,bank_private,NSE
+CAMS,Computer Age Management Services Ltd.,INE596I01020,broker_exchange_infra,NSE
+CREDITACC,CreditAccess Grameen Ltd.,INE741K01010,nbfc,NSE
+FEDERALBNK,Federal Bank Ltd.,INE171A01029,bank_private,NSE
+FIVESTAR,Five-Star Business Finance Ltd.,INE128S01021,nbfc,NSE
+GICRE,General Insurance Corporation of India,INE481Y01014,insurance_general,NSE
+HDBFS,HDB Financial Services Ltd.,INE756I01012,nbfc,NSE
+HDFCAMC,HDFC Asset Management Company Ltd.,INE127D01025,amc_wealth,NSE
+HDFCBANK,HDFC Bank Ltd.,INE040A01034,bank_private,NSE
+HDFCLIFE,HDFC Life Insurance Company Ltd.,INE795G01014,insurance_life,NSE
+HOMEFIRST,Home First Finance Company India Ltd.,INE481N01025,housing_finance,NSE
+HUDCO,Housing & Urban Development Corporation Ltd.,INE031A01017,govt_financier,NSE
+ICICIBANK,ICICI Bank Ltd.,INE090A01021,bank_private,NSE
+ICICIGI,ICICI Lombard General Insurance Company Ltd.,INE765G01017,insurance_general,NSE
+ICICIAMC,ICICI Prudential Asset Management Company Ltd.,INE346A01027,amc_wealth,NSE
+ICICIPRULI,ICICI Prudential Life Insurance Company Ltd.,INE726G01019,insurance_life,NSE
+IDBI,IDBI Bank Ltd.,INE008A01015,bank_psu,NSE
+IDFCFIRSTB,IDFC First Bank Ltd.,INE092T01019,bank_private,NSE
+IFCI,IFCI Ltd.,INE039A01010,govt_financier,NSE
+IIFL,IIFL Finance Ltd.,INE530B01024,nbfc,NSE
+INDIANB,Indian Bank,INE562A01011,bank_psu,NSE
+IEX,Indian Energy Exchange Ltd.,INE022Q01020,broker_exchange_infra,NSE
+IOB,Indian Overseas Bank,INE565A01014,bank_psu,NSE
+IRFC,Indian Railway Finance Corporation Ltd.,INE053F01010,govt_financier,NSE
+IREDA,Indian Renewable Energy Development Agency Ltd.,INE202E01016,govt_financier,NSE
+INDUSINDBK,IndusInd Bank Ltd.,INE095A01012,bank_private,NSE
+JMFINANCIL,JM Financial Ltd.,INE780C01023,nbfc,NSE
+J&KBANK,Jammu & Kashmir Bank Ltd.,INE168A01041,bank_private,NSE
+JIOFIN,Jio Financial Services Ltd.,INE758E01017,holding_investment,NSE
+KARURVYSYA,Karur Vysya Bank Ltd.,INE036D01028,bank_private,NSE
+KFINTECH,Kfin Technologies Ltd.,INE138Y01010,broker_exchange_infra,NSE
+KOTAKBANK,Kotak Mahindra Bank Ltd.,INE237A01036,bank_private,NSE
+LTF,L&T Finance Ltd.,INE498L01015,nbfc,NSE
+LICHSGFIN,LIC Housing Finance Ltd.,INE115A01026,housing_finance,NSE
+LICI,Life Insurance Corporation of India,INE0J1Y01017,insurance_life,NSE
+M&MFIN,Mahindra & Mahindra Financial Services Ltd.,INE774D01024,nbfc,NSE
+MANAPPURAM,Manappuram Finance Ltd.,INE522D01027,nbfc,NSE
+MFSL,Max Financial Services Ltd.,INE180A01020,insurance_life,NSE
+MOTILALOFS,Motilal Oswal Financial Services Ltd.,INE338I01027,broker_exchange_infra,NSE
+MCX,Multi Commodity Exchange of India Ltd.,INE745G01043,broker_exchange_infra,NSE
+MUTHOOTFIN,Muthoot Finance Ltd.,INE414G01012,nbfc,NSE
+NAM-INDIA,Nippon Life India Asset Management Ltd.,INE298J01013,amc_wealth,NSE
+NUVAMA,Nuvama Wealth Management Ltd.,INE531F01023,amc_wealth,NSE
+PAYTM,One 97 Communications Ltd.,INE982J01020,fintech_payments,NSE
+POLICYBZR,PB Fintech Ltd.,INE417T01026,fintech_payments,NSE
+PNBHOUSING,PNB Housing Finance Ltd.,INE572E01012,housing_finance,NSE
+PINELABS,Pine Labs Ltd.,INE15B701018,fintech_payments,NSE
+PIRAMALFIN,Piramal Finance Ltd.,INE202B01038,nbfc,NSE
+POONAWALLA,Poonawalla Fincorp Ltd.,INE511C01022,nbfc,NSE
+PFC,Power Finance Corporation Ltd.,INE134E01011,govt_financier,NSE
+PNB,Punjab National Bank,INE160A01022,bank_psu,NSE
+RBLBANK,RBL Bank Ltd.,INE976G01028,bank_private,NSE
+RECLTD,REC Ltd.,INE020B01018,govt_financier,NSE
+SBICARD,SBI Cards and Payment Services Ltd.,INE018E01016,nbfc,NSE
+SBILIFE,SBI Life Insurance Company Ltd.,INE123W01016,insurance_life,NSE
+SAMMAANCAP,Sammaan Capital Ltd.,INE148I01020,nbfc,NSE
+SHRIRAMFIN,Shriram Finance Ltd.,INE721A01047,nbfc,NSE
+STARHEALTH,Star Health and Allied Insurance Company Ltd.,INE575P01011,insurance_general,NSE
+SBIN,State Bank of India,INE062A01020,bank_psu,NSE
+SUNDARMFIN,Sundaram Finance Ltd.,INE660A01013,nbfc,NSE
+TATACAP,Tata Capital Ltd.,INE976I01016,nbfc,NSE
+TATAINVEST,Tata Investment Corporation Ltd.,INE672A01026,holding_investment,NSE
+NIACL,The New India Assurance Company Ltd.,INE470Y01017,insurance_general,NSE
+UCOBANK,UCO Bank,INE691A01018,bank_psu,NSE
+UTIAMC,UTI Asset Management Company Ltd.,INE094J01016,amc_wealth,NSE
+UNIONBANK,Union Bank of India,INE692A01016,bank_psu,NSE
+YESBANK,Yes Bank Ltd.,INE528G01035,bank_private,NSE

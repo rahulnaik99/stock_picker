@@ -1,0 +1,31 @@
+{
+  "default": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest"
+  },
+  "fundamental": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest"
+  },
+  "industry": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest"
+  },
+  "indicator": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest"
+  },
+  "trend_flow": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest"
+  },
+  "option_chain": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest"
+  },
+  "decision_maker": {
+    "provider": "ollama",
+    "model": "qwen3-4b-instruct-16k:latest",
+    "temperature": 0.0
+  }
+}

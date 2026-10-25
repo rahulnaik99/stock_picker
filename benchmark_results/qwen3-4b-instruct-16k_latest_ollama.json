@@ -1,0 +1,61 @@
+{
+  "name": "qwen3-4b-instruct-16k:latest",
+  "runtime": "ollama",
+  "model_id": "qwen3-4b-instruct-16k:latest",
+  "started_at_utc": "2026-10-24T15:36:28.670128+00:00",
+  "elapsed_seconds": 52.345,
+  "valid_json": true,
+  "json_parse_error": null,
+  "prompt_tokens": 1725,
+  "completion_tokens": 1370,
+  "server_total_duration_ns": 52325198667,
+  "finish_reason": "stop",
+  "response": {
+    "symbol": "CANBK",
+    "score": 1.2,
+    "confidence": 0.85,
+    "direction": "MIXED",
+    "fundamental_summary": "Net interest income declined slightly in the latest quarter with a YoY growth of 2.5%, while net profit dropped by 12.2% quarter-on-quarter. Net NPAs improved from 1.1% to 0.85%, provision coverage increased to 93.4%, and credit cost rose to 0.60% — a concern. ROA declined to 0.98% from 1.15%, and cost-to-income ratio increased to 51.8%, indicating rising operating costs. Credit growth slowed to 9.6% YoY, and CASA ratio declined to 30.9%. Dividend payout remains at 22%, consistent with PSU bank norms.",
+    "industry_summary": "The PSU bank index and bank Nifty declined by 3.2% and 1.1% over 3 months, respectively. System credit and deposit growth remain strong at 11.0% and 9.8% YoY. Policy rate is at 5.5% with neutral stance and liquidity surplus. However, the sector-wide NPAs are at 3.0%, and net interest margins are compressing — a structural headwind for banks.",
+    "investment_trend_summary": "FII holdings decreased slightly from 10.1% to 9.6%, while mutual fund holdings rose from 15.8% to 16.4%. No bulk deals observed in the last 30 days. Market-wide FII net cash inflow over 10 days is ₹6,200 Cr, and DII is ₹3,100 Cr — but these are not indicative of CANBK-specific direction. No direct evidence of CANBK-specific flow changes is provided.",
+    "technical_summary": "Price closed at ₹98.4, down 4.1% over 20 days and 6.8% over 60 days. 50-day and 200-day moving averages are at ₹101.5 and ₹104.2, respectively, indicating a downward trend. Price is 5.6% below 200-day MA. RSI at 38 suggests oversold conditions, MACD histogram negative at -0.62, and ATR at 2.1% of price. Realized volatility is 31%, above median. Relative strength is 5.7% below bank Nifty over 60 days. Volume z-score is 0.6 (normal), delivery is 41% (low), and price is 23.1% below 52-week high.",
+    "options_summary": "Put-call ratio is 0.78 (bearish bias), max call strike at 105, max put at 95 — indicating bearish sentiment. ATM implied volatility is 34%, 72nd percentile in 1-year history (moderate volatility). Put-call skew is +3.1, suggesting higher put demand. Option OI increased by 8% over 5 days, price dropped 2.6%, and there is a 'short build-up' with 71% rollover (below 3-month average of 78%). This suggests short-term bearish positioning with some repositioning.",
+    "supporting_evidence": "Fundamental deterioration in net profit and ROA, despite improving NPAs and provision coverage. Industry-wide margin compression and declining sector returns suggest headwinds. Technicals show oversold conditions with strong bearish technical signals. Options show bearish sentiment with rising put demand and short build-up. However, valuation remains stable with PB of 1.0 (below peer median of 1.1), and dividend yield at 3.1% is attractive. No clear directional signal from flows or fundamentals alone.",
+    "risks": [
+      "Declining ROA and cost-to-income ratio suggest rising operating inefficiencies.",
+      "Credit cost increased to 0.60%, which may signal deteriorating loan quality or rising non-performing loan provisions.",
+      "Sector-wide net interest margin compression and declining sector returns imply structural headwinds.",
+      "Technicals show oversold conditions, but no reversal signal; price is 23% below 52-week high.",
+      "Options show bearish sentiment with short build-up, but rollover is below average — suggesting potential short-term reversal risk.",
+      "No data on loan quality by segment or macroeconomic shocks affecting credit demand."
+    ],
+    "missing_data": [
+      "No data on loan loss provisions by segment (e.g., retail vs. corporate).",
+      "No data on deposit mix (e.g., savings vs. term deposits).",
+      "No data on macroeconomic indicators (e.g., GDP growth, inflation, unemployment).",
+      "No data on interest rate sensitivity of CANBK's loan book or deposit base.",
+      "No data on peer bank comparisons for ROA, cost-to-income, or NPAs.",
+      "No data on trading volume or order flow dynamics beyond delivery percentages.",
+      "No data on option strike price distribution or implied volatility surface.",
+      "No data on regulatory or policy changes affecting PSU banks in the last 6 months."
+    ],
+    "decision_rationale": "The fundamental performance shows a sharp decline in net profit and ROA, with rising credit cost and cost-to-income ratio, despite improving NPAs. Industry conditions show margin compression and sector-wide declines. Technicals indicate oversold conditions with strong bearish signals. Options show bearish sentiment with rising put demand and short build-up. Valuation is stable and attractive. However, the combination of deteriorating fundamentals and bearish technicals suggests a risk of further downside. The mixed direction arises because while fundamentals show weakness, valuation and dividend yield provide a buffer. Without evidence of macro shocks or credit deterioration, the outlook is not clearly bullish. The score of +1.2 reflects a slight positive tilt due to stable valuation and dividend, but confidence is moderate due to conflicting signals. Look-ahead bias is avoided by using only provided data. Walk-forward validation is not performed due to lack of historical time-series for ranking. Transaction costs are not modeled due to absence of bid-ask spread or brokerage data. Out-of-sample quality is not evaluated due to lack of backtest data. All signals are derived from provided MOCK data only."
+  },
+  "raw_api_response": {
+    "model": "qwen3-4b-instruct-16k:latest",
+    "created_at": "2026-10-24T15:37:21.090341Z",
+    "message": {
+      "role": "assistant",
+      "content": "{\n  \"symbol\": \"CANBK\",\n  \"score\": 1.2,\n  \"confidence\": 0.85,\n  \"direction\": \"MIXED\",\n  \"fundamental_summary\": \"Net interest income declined slightly in the latest quarter with a YoY growth of 2.5%, while net profit dropped by 12.2% quarter-on-quarter. Net NPAs improved from 1.1% to 0.85%, provision coverage increased to 93.4%, and credit cost rose to 0.60% — a concern. ROA declined to 0.98% from 1.15%, and cost-to-income ratio increased to 51.8%, indicating rising operating costs. Credit growth slowed to 9.6% YoY, and CASA ratio declined to 30.9%. Dividend payout remains at 22%, consistent with PSU bank norms.\",\n  \"industry_summary\": \"The PSU bank index and bank Nifty declined by 3.2% and 1.1% over 3 months, respectively. System credit and deposit growth remain strong at 11.0% and 9.8% YoY. Policy rate is at 5.5% with neutral stance and liquidity surplus. However, the sector-wide NPAs are at 3.0%, and net interest margins are compressing — a structural headwind for banks.\",\n  \"investment_trend_summary\": \"FII holdings decreased slightly from 10.1% to 9.6%, while mutual fund holdings rose from 15.8% to 16.4%. No bulk deals observed in the last 30 days. Market-wide FII net cash inflow over 10 days is ₹6,200 Cr, and DII is ₹3,100 Cr — but these are not indicative of CANBK-specific direction. No direct evidence of CANBK-specific flow changes is provided.\",\n  \"technical_summary\": \"Price closed at ₹98.4, down 4.1% over 20 days and 6.8% over 60 days. 50-day and 200-day moving averages are at ₹101.5 and ₹104.2, respectively, indicating a downward trend. Price is 5.6% below 200-day MA. RSI at 38 suggests oversold conditions, MACD histogram negative at -0.62, and ATR at 2.1% of price. Realized volatility is 31%, above median. Relative strength is 5.7% below bank Nifty over 60 days. Volume z-score is 0.6 (normal), delivery is 41% (low), and price is 23.1% below 52-week high.\",\n  \"options_summary\": \"Put-call ratio is 0.78 (bearish bias), max call strike at 105, max put at 95 — indicating bearish sentiment. ATM implied volatility is 34%, 72nd percentile in 1-year history (moderate volatility). Put-call skew is +3.1, suggesting higher put demand. Option OI increased by 8% over 5 days, price dropped 2.6%, and there is a 'short build-up' with 71% rollover (below 3-month average of 78%). This suggests short-term bearish positioning with some repositioning.\",\n  \"supporting_evidence\": \"Fundamental deterioration in net profit and ROA, despite improving NPAs and provision coverage. Industry-wide margin compression and declining sector returns suggest headwinds. Technicals show oversold conditions with strong bearish technical signals. Options show bearish sentiment with rising put demand and short build-up. However, valuation remains stable with PB of 1.0 (below peer median of 1.1), and dividend yield at 3.1% is attractive. No clear directional signal from flows or fundamentals alone.\",\n  \"risks\": [\n    \"Declining ROA and cost-to-income ratio suggest rising operating inefficiencies.\",\n    \"Credit cost increased to 0.60%, which may signal deteriorating loan quality or rising non-performing loan provisions.\",\n    \"Sector-wide net interest margin compression and declining sector returns imply structural headwinds.\",\n    \"Technicals show oversold conditions, but no reversal signal; price is 23% below 52-week high.\",\n    \"Options show bearish sentiment with short build-up, but rollover is below average — suggesting potential short-term reversal risk.\",\n    \"No data on loan quality by segment or macroeconomic shocks affecting credit demand.\"\n  ],\n  \"missing_data\": [\n    \"No data on loan loss provisions by segment (e.g., retail vs. corporate).\",\n    \"No data on deposit mix (e.g., savings vs. term deposits).\",\n    \"No data on macroeconomic indicators (e.g., GDP growth, inflation, unemployment).\",\n    \"No data on interest rate sensitivity of CANBK's loan book or deposit base.\",\n    \"No data on peer bank comparisons for ROA, cost-to-income, or NPAs.\",\n    \"No data on trading volume or order flow dynamics beyond delivery percentages.\",\n    \"No data on option strike price distribution or implied volatility surface.\",\n    \"No data on regulatory or policy changes affecting PSU banks in the last 6 months.\"\n  ],\n  \"decision_rationale\": \"The fundamental performance shows a sharp decline in net profit and ROA, with rising credit cost and cost-to-income ratio, despite improving NPAs. Industry conditions show margin compression and sector-wide declines. Technicals indicate oversold conditions with strong bearish signals. Options show bearish sentiment with rising put demand and short build-up. Valuation is stable and attractive. However, the combination of deteriorating fundamentals and bearish technicals suggests a risk of further downside. The mixed direction arises because while fundamentals show weakness, valuation and dividend yield provide a buffer. Without evidence of macro shocks or credit deterioration, the outlook is not clearly bullish. The score of +1.2 reflects a slight positive tilt due to stable valuation and dividend, but confidence is moderate due to conflicting signals. Look-ahead bias is avoided by using only provided data. Walk-forward validation is not performed due to lack of historical time-series for ranking. Transaction costs are not modeled due to absence of bid-ask spread or brokerage data. Out-of-sample quality is not evaluated due to lack of backtest data. All signals are derived from provided MOCK data only.\"\n}"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 52325198667,
+    "load_duration": 2090770833,
+    "prompt_eval_count": 1725,
+    "prompt_eval_cached_count": 0,
+    "prompt_eval_duration": 2813160000,
+    "eval_count": 1370,
+    "eval_duration": 47402988000
+  }
+}

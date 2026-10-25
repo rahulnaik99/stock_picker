@@ -1,0 +1,15 @@
+{
+  "version": "v1-initial",
+  "weights": {
+    "fundamental": 0.30,
+    "industry": 0.20,
+    "indicator": 0.25,
+    "investment_trend": 0.15,
+    "option_chain": 0.10
+  },
+  "required": ["fundamental", "industry", "indicator"],
+  "min_data_completeness": 0.80,
+  "score_discrepancy_threshold": 2.0,
+  "overextended_blocks_entry": true,
+  "min_final_score_for_entry": 2.0
+}
