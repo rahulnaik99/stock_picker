@@ -241,9 +241,20 @@ def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         lf = {k: latest.get(k) for k in ("period_end", "basis", "reported_on", "audited", "xbrl_url")}
         if latest_xbrl is not None:
             lf["xbrl"] = latest_xbrl   # already fetched; the caller must not re-fetch
+    # Why do recent quarters get skipped? Dump the NEWEST filings' raw fields so it is visible in the report:
+    # whether the 2025/2026 rows carry an `xbrl` link, a detail link, and how they classify.
+    def _rawdate(r: dict[str, Any]) -> str:
+        d = parse_any_dt(_first(r, _NSE_KEYS["period_end"]))
+        return d.date().isoformat() if d else ""
+    recent_raw = [{k: r.get(k) for k in ("toDate", "consolidated", "audited", "xbrl", "resultDetailedDataLink", "format", "indAs", "reInd", "oldNewFlag")}
+                  for r in sorted(raw, key=_rawdate, reverse=True)[:6]]
     diag = {"endpoint": "/api/corporates-financial-results", "payload_type": type(payload).__name__,
             "list_rows": len(raw), "filings_found": len(filings), "parsed_rows": len(rows),
-            "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else []), "xbrl": xd, "latest_filing": lf}
+            "newest_filing_any": (by_recent[0]["period_end"] if by_recent else None),
+            "newest_consolidated_with_xbrl": (cons[0]["period_end"] if cons else None),
+            "filings_with_xbrl": sum(1 for f in filings if f.get("xbrl_url")),
+            "sample_raw_keys": (sorted(raw[0].keys())[:30] if raw else []),
+            "recent_raw": recent_raw, "xbrl": xd, "latest_filing": lf}
     return rows, diag
 
 

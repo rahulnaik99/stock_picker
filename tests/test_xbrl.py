@@ -42,6 +42,21 @@ def test_parse_bank_kpis_pnl_kpis_units_and_context():
     assert k["eps"] == 5.93
 
 
+def test_parse_bank_kpis_net_npa_alternate_tags():
+    # NSE's banking schema names net NPA as PercentageOfNpa / NonPerformingAssets (gross is Gross*).
+    xml = (b'<?xml version="1.0"?><xbrl xmlns="http://x" xmlns:in="http://nse.in/fin">'
+           b'<context id="c"><period><instant>2024-12-31</instant></period></context>'
+           b'<in:GrossNonPerformingAssets contextRef="c">350000000000</in:GrossNonPerformingAssets>'
+           b'<in:PercentageOfGrossNpa contextRef="c">0.0334</in:PercentageOfGrossNpa>'
+           b'<in:NonPerformingAssets contextRef="c">90000000000</in:NonPerformingAssets>'
+           b'<in:PercentageOfNpa contextRef="c">0.0089</in:PercentageOfNpa>'
+           b'<in:CapitalAdequacyRatio contextRef="c">0.1673</in:CapitalAdequacyRatio></xbrl>')
+    d = xbrl.parse_bank_kpis(xml)
+    assert d["kpis"]["gross_npa_pct"] == 3.34 and d["kpis"]["net_npa_pct"] == 0.89
+    assert d["kpis"]["net_npa_amt"] == 9000.0 and d["kpis"]["gross_npa_amt"] == 35000.0
+    assert d["kpis"]["crar_pct"] == 16.73
+
+
 def test_parse_bank_kpis_reports_missing_when_tags_absent():
     d = xbrl.parse_bank_kpis(b'<?xml version="1.0"?><xbrl xmlns="http://x"><context id="c"><period><instant>2026-09-30</instant></period></context><SomethingElse contextRef="c">1</SomethingElse></xbrl>')
     assert d["status"] == "unavailable" and "gross_npa_pct" in d["missing"]
