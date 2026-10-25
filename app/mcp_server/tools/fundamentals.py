@@ -190,6 +190,59 @@ def nse_filings(raw: list[dict[str, Any]], symbol: str) -> list[dict[str, Any]]:
     return out
 
 
+# NSE's SEBI "Integrated Filing - Financials" framework (post-2024 quarters live HERE, not in
+# corporates-financial-results). Flat JSON array; amounts in INR lakh; each row has a direct XBRL link.
+_INTEG_ENDPOINT = "/api/NextApi/apiClient/GetQuoteApi"
+
+
+def _parse_integrated_dt(s: Any):
+    from datetime import datetime
+    for fmt in ("%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except (ValueError, TypeError):
+            pass
+    d = parse_any_dt(s)
+    return d.date() if d else None
+
+
+def nse_integrated_filings(raw: list[dict[str, Any]], symbol: str) -> list[dict[str, Any]]:
+    """Parse the getIntegratedFilingData array into filing records carrying INLINE P&L (converted INR lakh -> crore)
+    plus the per-filing `xbrl_url`. The inline numbers are authoritative for the headline series; the XBRL is still
+    fetched for PPOP + bank KPIs (GNPA/NNPA/NII/capital)."""
+    div = NSE_UNIT_DIVISOR
+    out = []
+    for r in raw:
+        end = _parse_integrated_dt(r.get("gfrQuaterEnded"))
+        if end is None:
+            continue
+        rep = parse_any_dt(r.get("gfSystym"))
+        basis = "standalone" if str(r.get("gfrConsolidated", "")).lower().startswith(("non", "stand")) else "consolidated"
+        inc, pbt, pat = _num(r.get("gfrTotalIncome")), _num(r.get("gfrProBefTax")), _num(r.get("gfrNetProLoss"))
+        out.append({"symbol": symbol, "period_end": end.isoformat(), "basis": basis,
+                    "reported_on": rep.date().isoformat() if rep else None,
+                    "audited": (str(r.get("gfrAuditedUnaudited") or "").strip() or None),
+                    "xbrl_url": _abs_nse_url(r.get("gfrXbrlFname")), "detail_link": None,
+                    "inline": {"revenue": None if inc is None else round(inc / div, 2),
+                               "pbt": None if pbt is None else round(pbt / div, 2),
+                               "pat": None if pat is None else round(pat / div, 2),
+                               "eps": _num(r.get("gfrErnPerShare"))}})
+    return out
+
+
+def _dedup_filings(fs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse duplicate (period_end, basis) filings (the integrated feed lists re-broadcasts), keeping the one
+    with an XBRL link and the latest reported_on."""
+    best: dict[tuple[str, str], dict[str, Any]] = {}
+    for f in fs:
+        key = (f["period_end"], f["basis"])
+        cur = best.get(key)
+        rank = (bool(f.get("xbrl_url")), f.get("reported_on") or "")
+        if cur is None or rank > (bool(cur.get("xbrl_url")), cur.get("reported_on") or ""):
+            best[key] = f
+    return list(best.values())
+
+
 def _detail_rows(d: Any) -> list[dict[str, Any]]:
     """Normalise a resultDetailedDataLink response (list, or dict possibly wrapping data/resultBody/rows) to row dicts."""
     if isinstance(d, list):
@@ -212,20 +265,31 @@ def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     payload = nse_tools.nse_get("/api/corporates-financial-results", params, referer=ref)
     raw = nse_tools._rows(payload)
     filings = nse_filings(raw, sym)
-    # Post-2024 results moved to SEBI's "Integrated Filing" framework on a separate endpoint; the classic list
-    # above stops at the format cutover. Try the integrated endpoint too and merge (best-effort, diagnosed).
+    # Post-2024 results migrated to the SEBI "Integrated Filing - Financials" framework on a separate endpoint; the
+    # classic list above stops at the cutover (~Dec-2024). Pull the integrated feed and merge (integrated wins on
+    # overlap — it carries inline P&L + its own XBRL).
     integ: dict[str, Any] = {}
+    iraw: list[dict[str, Any]] = []
+    integ_filings: list[dict[str, Any]] = []
     try:
-        ipayload = nse_tools.nse_get("/api/integrated-filing-results", {"index": "equities", "symbol": sym, "period": "Quarterly", "type": "IF"}, referer=ref)
+        ipayload = nse_tools.nse_get(_INTEG_ENDPOINT, {"functionName": "getIntegratedFilingData", "symbol": sym}, referer=ref)
         iraw = nse_tools._rows(ipayload)
-        ifilings = nse_filings(iraw, sym)
-        integ = {"rows": len(iraw), "filings_parsed": len(ifilings),
+        integ_filings = _dedup_filings(nse_integrated_filings(iraw, sym))
+        integ = {"endpoint": _INTEG_ENDPOINT, "rows": len(iraw), "filings_parsed": len(integ_filings),
                  "sample_keys": (sorted(iraw[0].keys())[:30] if iraw else []),
-                 "newest": (max((f["period_end"] for f in ifilings), default=None))}
-        existing = {(f["period_end"], f["basis"]) for f in filings}
-        filings += [f for f in ifilings if (f["period_end"], f["basis"]) not in existing]
+                 "newest": max((f["period_end"] for f in integ_filings), default=None),
+                 "recent": [{k: r.get(k) for k in ("gfrQuaterEnded", "gfrConsolidated", "gfrNetProLoss", "gfrXbrlFname")}
+                            for r in iraw[:6]]}
     except Exception as exc:  # noqa: BLE001
-        integ = {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+        integ = {"endpoint": _INTEG_ENDPOINT, "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+    merged: dict[tuple[str, str], dict[str, Any]] = {(f["period_end"], f["basis"]): f for f in filings}
+    for f in integ_filings:
+        key = (f["period_end"], f["basis"])
+        cur = merged.get(key)
+        if cur is not None and not f.get("xbrl_url") and cur.get("xbrl_url"):
+            f = {**f, "xbrl_url": cur["xbrl_url"]}
+        merged[key] = f   # integrated is authoritative for overlapping quarters (newer framework, inline P&L)
+    filings = list(merged.values())
     by_recent = sorted(filings, key=lambda f: f["period_end"], reverse=True)
     cons = [f for f in by_recent if f["basis"] == "consolidated" and f.get("xbrl_url")]
     targets = (cons or [f for f in by_recent if f.get("xbrl_url")])[:NSE_XBRL_MAX]
@@ -237,14 +301,21 @@ def _fetch_nse_results(sym: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         xb = xbrl.fetch_bank_kpis(f["xbrl_url"], referer=ref)
         if i == 0:
             latest_xbrl, xd["latest_status"], xd["sample_tags"] = xb, xb.get("status"), (xb.get("sample_tags") or [])
+        k = (xb.get("kpis") or {}) if xb.get("status") in ("ok", "partial") else {}
+        inline = f.get("inline") or {}
+        # Headline P&L: prefer the XBRL fact (consistent after-minority tag across the series); fall back to the
+        # integrated feed's inline value so recent quarters land even if their XBRL schema differs.
+        revenue = k.get("total_income") if k.get("total_income") is not None else inline.get("revenue")
+        pbt = k.get("pbt") if k.get("pbt") is not None else inline.get("pbt")
+        pat = k.get("pat") if k.get("pat") is not None else inline.get("pat")
+        eps = k.get("eps") if k.get("eps") is not None else inline.get("eps")
+        op = k.get("op_profit")
         if xb.get("status") in ("ok", "partial"):
             xd["fetched"] += 1
-            k = xb.get("kpis") or {}
-            if k.get("pat") is not None or k.get("total_income") is not None:   # a usable P&L row (values already in crore)
-                rows.append({"symbol": sym, "period_end": f["period_end"], "basis": f["basis"], "source": "nse",
-                             "revenue": k.get("total_income"), "op_profit": k.get("op_profit"),
-                             "op_kind": "PPOP" if k.get("op_profit") is not None else None,
-                             "pbt": k.get("pbt"), "pat": k.get("pat"), "eps": k.get("eps"), "reported_on": f.get("reported_on")})
+        if pat is not None or revenue is not None:
+            rows.append({"symbol": sym, "period_end": f["period_end"], "basis": f["basis"], "source": "nse",
+                         "revenue": revenue, "op_profit": op, "op_kind": "PPOP" if op is not None else None,
+                         "pbt": pbt, "pat": pat, "eps": eps, "reported_on": f.get("reported_on")})
         else:
             xd["errors"].append(f"{f['period_end']}: {xb.get('error') or xb.get('status')}")
     xd["parsed_rows"] = len(rows)

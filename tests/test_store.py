@@ -65,6 +65,33 @@ def test_nse_filings_extracts_metadata_and_links():
     assert fs[1]["basis"] == "standalone" and fs[1]["xbrl_url"] == "https://www.nseindia.com/corporate/xbrl/j.xml"
 
 
+def test_nse_integrated_filings_parses_inline_pl_and_dedups():
+    raw = [
+        {"gfrsymbol": "CANBK", "gfrQuaterEnded": "30 Sep 2026", "gfrAuditedUnaudited": "Un-Audited", "gfrConsolidated": "Consolidated",
+         "gfrTotalIncome": "4093880", "gfrProBefTax": "698562", "gfrNetProLoss": "518203", "gfrErnPerShare": "5.93",
+         "gfrXbrlFname": "https://nsearchives.nseindia.com/corporate/xbrl/INTEGRATED_FILING_BANKING_A_WEB.xml", "gfSystym": "14-Oct-2026 17:40"},
+        {"gfrsymbol": "CANBK", "gfrQuaterEnded": "30 Sep 2026", "gfrAuditedUnaudited": "Un-Audited", "gfrConsolidated": "Standalone",
+         "gfrTotalIncome": "4093119", "gfrProBefTax": "697616", "gfrNetProLoss": "517476", "gfrErnPerShare": "5.70",
+         "gfrXbrlFname": "https://nsearchives.nseindia.com/corporate/xbrl/INTEGRATED_FILING_BANKING_B_WEB.xml", "gfSystym": "14-Oct-2026 17:40"},
+        # duplicate re-broadcast of the same quarter/basis, earlier timestamp -> must be collapsed
+        {"gfrsymbol": "CANBK", "gfrQuaterEnded": "31 Mar 2026", "gfrAuditedUnaudited": "Audited", "gfrConsolidated": "Consolidated",
+         "gfrTotalIncome": "3653861", "gfrProBefTax": "564376", "gfrNetProLoss": "438078", "gfrErnPerShare": "5.04",
+         "gfrXbrlFname": "https://nsearchives.nseindia.com/corporate/xbrl/INTEGRATED_FILING_BANKING_C1_WEB.xml", "gfSystym": "11-May-2026 23:31"},
+        {"gfrsymbol": "CANBK", "gfrQuaterEnded": "31 Mar 2026", "gfrAuditedUnaudited": "Audited", "gfrConsolidated": "Consolidated",
+         "gfrTotalIncome": "3653861", "gfrProBefTax": "564376", "gfrNetProLoss": "438078", "gfrErnPerShare": "5.04",
+         "gfrXbrlFname": "https://nsearchives.nseindia.com/corporate/xbrl/INTEGRATED_FILING_BANKING_C2_WEB.xml", "gfSystym": "11-May-2026 23:33"},
+    ]
+    fs = fundamentals._dedup_filings(fundamentals.nse_integrated_filings(raw, "CANBK"))
+    by_key = {(f["period_end"], f["basis"]): f for f in fs}
+    assert len(fs) == 3  # the Mar-2026 consolidated duplicate collapsed
+    sep = by_key[("2026-09-30", "consolidated")]
+    assert sep["reported_on"] == "2026-10-14" and sep["audited"] == "Un-Audited"
+    assert sep["inline"] == {"revenue": 40938.8, "pbt": 6985.62, "pat": 5182.03, "eps": 5.93}  # INR lakh -> crore
+    assert by_key[("2026-09-30", "standalone")]["inline"]["eps"] == 5.70
+    mar = by_key[("2026-03-31", "consolidated")]
+    assert mar["reported_on"] == "2026-05-11" and mar["xbrl_url"].endswith("_WEB.xml")  # single surviving filing
+
+
 def test_detail_rows_normalises_shapes():
     assert fundamentals._detail_rows([{"a": 1}]) == [{"a": 1}]
     assert fundamentals._detail_rows({"data": [{"a": 1}]}) == [{"a": 1}]
