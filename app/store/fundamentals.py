@@ -174,6 +174,24 @@ def _trend(series: list[Any]) -> str:
     return "mixed"
 
 
+def _divergence_signal(lt_trend: str | None, st_trend: str | None) -> dict[str, str]:
+    """Characterise the relationship between a 3-year track record and the most-recent-3-quarter momentum.
+    The four meaningful combinations map to actionable labels and an interpretation the model can cite."""
+    sig_map = {
+        ("deteriorating", "improving"): ("turnaround",
+            "LT deteriorating but 3Q accelerating — possible early turnaround; treat cautiously until 2+ quarters confirm."),
+        ("improving", "deteriorating"): ("slowdown",
+            "LT improving but 3Q decelerating — established growth potentially stalling; lower conviction for bullish calls."),
+        ("improving", "improving"): ("sustained_growth",
+            "Both LT and ST improving — highest-conviction bullish fundamental read; durable, not a one-quarter spike."),
+        ("deteriorating", "deteriorating"): ("sustained_decline",
+            "Both LT and ST deteriorating — highest-conviction bearish read; avoid attributing the decline to a one-off."),
+    }
+    key = (lt_trend, st_trend)
+    sig, interp = sig_map.get(key, ("mixed", "Mixed or insufficient signals between long-term and short-term."))
+    return {"signal": sig, "lt_trend": lt_trend or "unknown", "st_trend": st_trend or "unknown", "interpretation": interp}
+
+
 def horizon_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Long-term (last 3 complete fiscal years, Apr-Mar) and short-term (last 3 quarters) views of the series.
     Fiscal year of a quarter ending month m, year y = y if m <= 3 else y+1 (so Jun/Sep/Dec/Mar roll into one FY)."""
@@ -209,7 +227,9 @@ def horizon_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "pat_qoq_pct": [_pct(b.get("pat"), a.get("pat")) for a, b in zip(last3, last3[1:])],
         "trend": _trend([q.get("pat") for q in last3]),
     }
-    return {"long_term_3y": long_term, "short_term_3q": short_term}
+    return {"long_term_3y": long_term, "short_term_3q": short_term,
+            "divergence": _divergence_signal(long_term.get("trend") if long_term else None,
+                                             short_term.get("trend") if short_term else None)}
 
 
 def _gaps(rows: list[dict[str, Any]]) -> list[str]:

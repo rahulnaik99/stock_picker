@@ -253,6 +253,12 @@ def demand_supply_zones(daily: pd.DataFrame, intraday: pd.DataFrame | None = Non
     ema_stack = ("bullish" if e20 and e50 and px > e20 > e50 else
                  "bearish" if e20 and e50 and px < e20 < e50 else "mixed")
     vwap_side = None if vwap is None else ("above" if px > vwap else "below")
+    # Volume context: is recent activity expanding or contracting vs the lookback median?
+    recent5 = float(d["volume"].tail(5).mean()) if len(d) >= 5 else med_vol
+    vol_ratio = round(recent5 / med_vol, 2) if med_vol else 1.0
+    vol_trend = "expanding" if vol_ratio > 1.25 else "contracting" if vol_ratio < 0.75 else "normal"
+    last_bar = d.iloc[-1]
+    high_vol_last_bar = bool(float(last_bar["volume"]) > med_vol * 1.5)
 
     return {
         "as_of_bar": daily["time"].iloc[-1].isoformat(), "close": round(px, 2), "atr14": round(atr_v, 2),
@@ -262,6 +268,10 @@ def demand_supply_zones(daily: pd.DataFrame, intraday: pd.DataFrame | None = Non
         "nearest_demand": nd, "nearest_supply": ns,
         "price_action": {"position": position, "last3_up": last3_up, "close_location": close_loc,
                          "reclaim_ema20": bool(e20 and px > e20), "lost_ema20": bool(e20 and px < e20)},
+        "volume_context": {"recent5_avg": round(recent5, 0), "median_lookback": round(med_vol, 0),
+                           "ratio": vol_ratio, "trend": vol_trend,
+                           "high_volume_last_bar": high_vol_last_bar,
+                           "note": "expanding volume on a bounce from demand = conviction; on a rejection from supply = conviction. Contracting volume on a move = weak conviction."},
     }
 
 
@@ -289,10 +299,13 @@ def _compact_tf(z: dict[str, Any] | None) -> dict[str, Any] | None:
             "nearest_demand": z.get("nearest_demand"), "nearest_supply": z.get("nearest_supply")}
 
 
-def build_trade_plan(z: dict[str, Any], capital: float = 100000.0, risk_pct: float = 1.0) -> dict[str, Any]:
+def build_trade_plan(z: dict[str, Any], capital: float = 100000.0, risk_pct: float = 1.0,
+                     force_bias: str | None = None) -> dict[str, Any]:
     """Deterministic trade plan from the (daily) zone read. Picks a side, then sets entry at the reaction zone,
     stop-loss just beyond it (0.5*ATR buffer), target at the opposite zone (or a 2R projection if none), and sizes
-    the position so the loss at the stop = capital * risk_pct%. Pure and auditable; the LLM only justifies it."""
+    the position so the loss at the stop = capital * risk_pct%. Pure and auditable; the LLM only justifies it.
+    `force_bias` ("long" | "short") bypasses the automatic side selection — used to produce BOTH a long and a
+    short plan from the same zones (e.g. to generate the bull/bear dual chart)."""
     px, atr_v = z.get("close"), z.get("atr14") or 0.0
     nd, ns = z.get("nearest_demand"), z.get("nearest_supply")
     stack = z.get("ema_stack")
@@ -301,12 +314,21 @@ def build_trade_plan(z: dict[str, Any], capital: float = 100000.0, risk_pct: flo
         return {"bias": "none", "reason": "no price"}
     buf = max(0.5 * atr_v, px * 0.003)
 
-    long_ok = nd is not None and (stack == "bullish" or pos == "at_demand")
-    short_ok = ns is not None and (stack == "bearish" or pos == "at_supply")
-    bias = ("long" if long_ok and not short_ok else "short" if short_ok and not long_ok
-            else "long" if long_ok and stack == "bullish" else "short" if short_ok and stack == "bearish" else "none")
-    if bias == "none":
-        return {"bias": "none", "reason": "no clean demand/supply setup for a directional trade"}
+    if force_bias == "long":
+        bias = "long" if nd is not None else "none"
+        if bias == "none":
+            return {"bias": "none", "reason": "no demand zone available for a long plan"}
+    elif force_bias == "short":
+        bias = "short" if ns is not None else "none"
+        if bias == "none":
+            return {"bias": "none", "reason": "no supply zone available for a short plan"}
+    else:
+        long_ok = nd is not None and (stack == "bullish" or pos == "at_demand")
+        short_ok = ns is not None and (stack == "bearish" or pos == "at_supply")
+        bias = ("long" if long_ok and not short_ok else "short" if short_ok and not long_ok
+                else "long" if long_ok and stack == "bullish" else "short" if short_ok and stack == "bearish" else "none")
+        if bias == "none":
+            return {"bias": "none", "reason": "no clean demand/supply setup for a directional trade"}
 
     if bias == "long":
         entry = round(px if pos == "at_demand" else nd["high"], 2)
@@ -376,6 +398,8 @@ def get_demand_supply_zones(symbol: str, as_of: str | None = None,
         data["mtf_bias"] = alignment
 
         data["trade_plan"] = build_trade_plan(data, capital=capital, risk_pct=risk_pct)
+        data["long_plan"] = build_trade_plan(data, capital=capital, risk_pct=risk_pct, force_bias="long")
+        data["short_plan"] = build_trade_plan(data, capital=capital, risk_pct=risk_pct, force_bias="short")
         data["candle_provider"] = provider
         data["bars_used"] = int(len(daily))
         return ok(provider, data, symbol=clean_symbol(symbol))

@@ -59,3 +59,25 @@ def test_trader_baseline_bull_vs_bear_and_net():
     net2, parts2 = baselines.trader_baseline(bear_zones)
     assert parts2["bear_score"] > parts2["bull_score"] and net2 < 0
     assert baselines.trader_baseline(None)[0] == 0.0
+
+
+def test_horizon_baseline_delta_signals():
+    # turnaround: LT bear + ST bull -> positive delta
+    hv = {"long_term_3y": {"trend": "deteriorating", "pat_cagr_pct": -5.0},
+          "short_term_3q": {"trend": "improving"},
+          "divergence": {"signal": "turnaround", "lt_trend": "deteriorating", "st_trend": "improving"}}
+    assert baselines.horizon_baseline_delta(hv) > 0
+    # sustained_decline: both bear -> negative
+    hv2 = {"long_term_3y": {"trend": "deteriorating", "pat_cagr_pct": -18.0},
+            "short_term_3q": {"trend": "deteriorating"},
+            "divergence": {"signal": "sustained_decline", "lt_trend": "deteriorating", "st_trend": "deteriorating"}}
+    assert baselines.horizon_baseline_delta(hv2) < 0
+    # high-growth sustained: delta boosted beyond base
+    hv3 = {"long_term_3y": {"trend": "improving", "pat_cagr_pct": 30.0},
+            "short_term_3q": {"trend": "improving"},
+            "divergence": {"signal": "sustained_growth", "lt_trend": "improving", "st_trend": "improving"}}
+    assert baselines.horizon_baseline_delta(hv3) > baselines.horizon_baseline_delta(
+        {"long_term_3y": {"trend": "improving", "pat_cagr_pct": 5.0},
+         "short_term_3q": {"trend": "improving"},
+         "divergence": {"signal": "sustained_growth", "lt_trend": "improving", "st_trend": "improving"}})
+    assert baselines.horizon_baseline_delta(None) == 0.0

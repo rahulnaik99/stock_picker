@@ -15,7 +15,7 @@ from typing import Any
 from app.service.settings import get_settings
 from app.store import runs as run_store
 
-AGENT_ORDER = ["fundamental", "industry", "indicator", "investment_trend", "option_chain", "decision_maker", "final"]
+AGENT_ORDER = ["fundamental", "industry", "indicator", "trader", "investment_trend", "option_chain", "decision_maker", "final"]
 
 
 def _trace_dir(run_id: str) -> Path:

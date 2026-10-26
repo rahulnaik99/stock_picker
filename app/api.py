@@ -365,3 +365,68 @@ async def get_run_traces(run_id: str, symbol: str = Query(..., min_length=1, max
             continue
         traces.append({"agent": path.stem[len(safe_symbol) + 1:], "file": path.name, **payload})
     return {"run_id": run_id, "symbol": safe_symbol, "count": len(traces), "traces": traces}
+
+
+@app.get("/api/chart/{symbol}", tags=["charts"])
+async def get_chart(symbol: str, lookback: int = Query(default=160, ge=30, le=420),
+                    capital: float = Query(default=100000.0), risk_pct: float = Query(default=1.0)) -> Response:
+    """Generate and return a Trader chart PNG for `symbol` on demand: price + EMAs + demand/supply zones
+    + VWAP + the bull/bear trade plan (entry / stop-loss / target). Uses FYERS candles if the token is
+    set, otherwise falls back to Yahoo. Requires `matplotlib` to be installed."""
+    import os, tempfile
+    sym = "".join(c for c in symbol.upper() if c.isalnum())
+    if not sym:
+        raise HTTPException(status_code=400, detail="Invalid symbol")
+    try:
+        from app.mcp_server.tools import indicators
+        from app.viz.chart import plot_trade_chart
+        import pandas as pd
+        daily: pd.DataFrame | None = None
+        provider = "unknown"
+        # Try FYERS first (live candles, no separate token setup needed if app is running).
+        try:
+            from app.mcp_server.tools.market import fetch_candles
+            df, provider = fetch_candles(sym, "D", 420, None)
+            if len(df) >= 60:
+                daily = df
+        except Exception:  # noqa: BLE001
+            pass
+        # Fall back to Yahoo if FYERS is unavailable.
+        if daily is None:
+            from app.backtest.data import load_yahoo_daily
+            from datetime import date, timedelta
+            panel = load_yahoo_daily([sym], (date.today() - timedelta(days=760)).isoformat(), date.today().isoformat())
+            if sym in panel and len(panel[sym]) >= 60:
+                daily, provider = panel[sym], "yahoo"
+        if daily is None or len(daily) < 60:
+            raise HTTPException(status_code=422, detail=f"Insufficient candle history for {sym} "
+                                "(ensure FYERS_ACCESS_TOKEN is set, or run python -m scripts.fyers_login)")
+        zones = indicators.demand_supply_zones(daily.tail(420), None)
+        long_plan = indicators.build_trade_plan(zones, capital=capital, risk_pct=risk_pct, force_bias="long")
+        short_plan = indicators.build_trade_plan(zones, capital=capital, risk_pct=risk_pct, force_bias="short")
+        # fetch events for chart markers (best-effort)
+        events: list[dict] = []
+        try:
+            from app.mcp_server.tools import nse as nse_tools
+            ev = nse_tools.nse_company_events(sym, days=90)
+            if ev.get("status") == "ok":
+                events = ev.get("data") or []
+        except Exception:  # noqa: BLE001
+            pass
+        from app.viz.chart import plot_dual_chart
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            plot_dual_chart(daily, zones, long_plan, short_plan, tmp_path, symbol=sym,
+                            lookback=lookback, events=events)
+            img = open(tmp_path, "rb").read()
+        finally:
+            os.unlink(tmp_path)
+        return Response(content=img, media_type="image/png",
+                        headers={"Cache-Control": "no-store", "Content-Disposition": f'inline; filename="{sym}.png"'})
+    except HTTPException:
+        raise
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail=f"matplotlib not installed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

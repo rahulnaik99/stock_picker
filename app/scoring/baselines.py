@@ -103,10 +103,32 @@ def trend_baseline(fii_dii: dict[str, Any] | None, shareholding: list[dict[str, 
     return _clamp(score, -5, 5), parts
 
 
+# --------------------------------------------------------------------------- horizon divergence (LT vs ST fundamental)
+def horizon_baseline_delta(horizon_view: dict[str, Any] | None) -> float:
+    """Baseline adjustment from the long-term/short-term fundamental divergence (range ±2).
+    Turnaround (LT bear + ST bull) and sustained growth give a positive nudge; slowdown and
+    sustained decline give a negative one. Capped so the LLM can still steer within ±2."""
+    if not horizon_view:
+        return 0.0
+    div = (horizon_view.get("divergence") or {})
+    sig = div.get("signal", "mixed")
+    delta = {"turnaround": 0.8, "sustained_growth": 1.0, "slowdown": -0.8, "sustained_decline": -1.0, "mixed": 0.0}
+    d = delta.get(sig, 0.0)
+    lt = (horizon_view.get("long_term_3y") or {})
+    cagr = lt.get("pat_cagr_pct")
+    if isinstance(cagr, (int, float)):
+        if cagr >= 25:
+            d += 0.4 if d >= 0 else -0.4
+        elif cagr < 0 and sig in ("sustained_decline", "slowdown"):
+            d -= 0.3
+    return round(max(-2.0, min(2.0, d)), 2)
+
+
 # --------------------------------------------------------------------------- trader (demand/supply, bull & bear)
-def trader_baseline(zones: dict[str, Any] | None) -> tuple[float, dict[str, Any]]:
+def trader_baseline(zones: dict[str, Any] | None, event_ctx: dict[str, Any] | None = None) -> tuple[float, dict[str, Any]]:
     """Price-action lens: builds a BULL score (demand/EMA/VWAP/structure in the long's favour) and a BEAR score
     (supply/EMA/VWAP/structure in the short's favour) from `get_demand_supply_zones`, then nets them.
+    Optional `event_ctx` adds small alignment terms from upcoming catalysts, block/bulk deals and FII/DII flow.
     `parts` keeps `bull_score` and `bear_score` so the agent can argue both sides explicitly."""
     if not zones:
         return 0.0, {"reason": "no zones"}
@@ -155,6 +177,30 @@ def trader_baseline(zones: dict[str, Any] | None) -> tuple[float, dict[str, Any]
         bull["mtf_aligned"] = 0.5
     elif mtf == "bearish_aligned":
         bear["mtf_aligned"] = 0.5
+
+    # 5) Event alignment: upcoming catalysts + institutional flow (small terms, max ±0.6 total).
+    if event_ctx:
+        upcoming = event_ctx.get("upcoming_catalysts") or []
+        fii = event_ctx.get("fii_dii") or {}
+        deal_lean = event_ctx.get("deal_lean", "neutral")
+
+        # Dividend near a demand zone = support buying ahead of ex-date (mild bull)
+        if any(e.get("type") == "dividend" for e in upcoming):
+            if pos == "at_demand":
+                bull["dividend_at_demand"] = 0.3
+
+        # FII/DII net flow (market-wide — applied conservatively as a small tilt only)
+        fii_lean = fii.get("lean", "neutral")
+        if fii_lean == "net_buying":
+            bull["fii_flow"] = 0.2
+        elif fii_lean == "net_selling":
+            bear["fii_flow"] = 0.2
+
+        # Block/bulk deal activity (stock-specific — stronger signal than market-wide FII)
+        if deal_lean == "net_buy":
+            bull["block_deal_buy"] = 0.3
+        elif deal_lean == "net_sell":
+            bear["block_deal_sell"] = 0.3
 
     bull_score = round(sum(bull.values()), 2)
     bear_score = round(sum(bear.values()), 2)

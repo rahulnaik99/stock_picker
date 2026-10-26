@@ -241,6 +241,7 @@ def nse_fii_dii(as_of: str | None = None) -> dict[str, Any]:
 
 def nse_deals(symbol: str, days: int = 30, as_of: str | None = None) -> dict[str, Any]:
     """STOCK-SPECIFIC bulk and block deals (large buyer/seller names, quantities)."""
+    import time
     src = "nse_deals"
     sym = clean_symbol(symbol)
     t = parse_as_of(as_of)
@@ -248,19 +249,36 @@ def nse_deals(symbol: str, days: int = 30, as_of: str | None = None) -> dict[str
     out: list[dict[str, Any]] = []
     errs: list[str] = []
     for kind in ("bulk-deals", "block-deals"):
-        try:
-            for r in _rows(nse_get(f"/api/historical/{kind}", {"symbol": sym, "from": _fmt(start), "to": _fmt(end)})):
-                day = parse_any_dt(r.get("BD_DT_DATE") or r.get("date"))
-                if day and day > t:
-                    continue
-                out.append({"type": kind[:-1], "date": str(day.date()) if day else None, "client": r.get("BD_CLIENT_NAME") or r.get("clientName"),
-                            "side": r.get("BD_BUY_SELL") or r.get("buySell"), "quantity": r.get("BD_QTY_TRD") or r.get("quantity"),
-                            "avg_price": r.get("BD_TP_WATP") or r.get("watp")})
-        except Exception as exc:  # noqa: BLE001
-            errs.append(f"{kind}: {exc}")
+        for attempt in range(2):                     # one immediate retry on 503 (endpoint is intermittently flaky)
+            try:
+                for r in _rows(nse_get(f"/api/historical/{kind}", {"symbol": sym, "from": _fmt(start), "to": _fmt(end)})):
+                    day = parse_any_dt(r.get("BD_DT_DATE") or r.get("date"))
+                    if day and day > t:
+                        continue
+                    out.append({"type": kind[:-1], "date": str(day.date()) if day else None,
+                                "client": r.get("BD_CLIENT_NAME") or r.get("clientName"),
+                                "side": r.get("BD_BUY_SELL") or r.get("buySell"),
+                                "quantity": r.get("BD_QTY_TRD") or r.get("quantity"),
+                                "avg_price": r.get("BD_TP_WATP") or r.get("watp")})
+                break
+            except SourceError as exc:
+                if "503" in str(exc) and attempt == 0:
+                    time.sleep(0.4)
+                    continue                          # retry once
+                errs.append(f"{kind}: {exc}")
+                break
+            except Exception as exc:  # noqa: BLE001
+                errs.append(f"{kind}: {exc}")
+                break
+    # 503 = NSE endpoint temporarily unavailable; return ok with empty list so the agent sees
+    # "no deals retrieved" rather than a hard error that pollutes the missing_data list.
+    if not out and errs and all("503" in e for e in errs):
+        return ok(src, [], symbol=sym, scope="stock_specific", feed_errors=errs,
+                  note="NSE bulk/block-deals endpoint temporarily unavailable (HTTP 503). Empty list returned.")
     if not out and errs:
         return error(src, " | ".join(errs))
-    return ok(src, out, symbol=sym, scope="stock_specific", feed_errors=errs, note="Empty list = no reported deals in window.")
+    return ok(src, out, symbol=sym, scope="stock_specific", feed_errors=errs,
+              note="Empty list = no reported deals in window.")
 
 
 def nse_shareholding(symbol: str) -> dict[str, Any]:

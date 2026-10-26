@@ -55,13 +55,24 @@ def main(argv: list[str] | None = None) -> int:
         daily = panel[sym]
         provider = "yahoo"
     zones = indicators.demand_supply_zones(daily.tail(420), None)
-    plan = indicators.build_trade_plan(zones, capital=a.capital, risk_pct=a.risk_pct)
+    long_plan = indicators.build_trade_plan(zones, capital=a.capital, risk_pct=a.risk_pct, force_bias="long")
+    short_plan = indicators.build_trade_plan(zones, capital=a.capital, risk_pct=a.risk_pct, force_bias="short")
+    # Fetch upcoming events for chart markers (requires NSE session; skipped gracefully if unavailable).
+    events: list[dict] = []
+    try:
+        from app.mcp_server.tools import nse as nse_tools
+        nse_tools._get_session()          # warms the session quietly
+        ev = nse_tools.nse_company_events(sym, days=90)
+        if ev.get("status") == "ok":
+            events = ev.get("data") or []
+    except Exception:  # noqa: BLE001 - events are optional; don't fail the chart
+        pass
     Path(out).parent.mkdir(parents=True, exist_ok=True)
-    plot_trade_chart(daily, zones, plan, out,
-                     title=f"{sym}  [{provider}]  EMA stack: {zones.get('ema_stack')}", lookback=a.lookback)
+    from app.viz.chart import plot_dual_chart
+    plot_dual_chart(daily, zones, long_plan, short_plan, out, symbol=sym, lookback=a.lookback, events=events)
     print(f"Wrote: {out}")
-    print(f"Plan: {plan.get('bias')}  entry {plan.get('entry')} / SL {plan.get('stop_loss')} / "
-          f"target {plan.get('target')}  |  R:R {plan.get('risk_reward')}  qty {plan.get('quantity')}")
+    print(f"LONG  plan: entry {long_plan.get('entry')} / SL {long_plan.get('stop_loss')} / target {long_plan.get('target')} | R:R {long_plan.get('risk_reward')} qty {long_plan.get('quantity')}")
+    print(f"SHORT plan: entry {short_plan.get('entry')} / SL {short_plan.get('stop_loss')} / target {short_plan.get('target')} | R:R {short_plan.get('risk_reward')} qty {short_plan.get('quantity')}")
     return 0
 
 

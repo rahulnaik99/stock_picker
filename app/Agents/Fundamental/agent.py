@@ -138,6 +138,9 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         evidence["data_freshness"] = {"warning": freshness}
     metrics_block = (qres.get("data") or {}).get("metrics") if qres["status"] == "ok" else None
     base_score, _parts = baselines.fundamental_baseline(metrics_block, meta.get("sub_sector"))
+    # Long-term / short-term divergence: turnaround or slowdown nudges the baseline even before the LLM speaks.
+    horizon_delta = baselines.horizon_baseline_delta(evidence.get("fundamental_view"))
+    base_score = max(-10.0, min(10.0, base_score + horizon_delta))
     res = await analyze(agent=NAME, llm_key=NAME, symbol=symbol, system_prompt=load_prompt(__file__, sub_sector=meta.get("sub_sector", "")),
                         evidence=evidence, tool_results=results, context={**meta, "as_of": as_of}, baseline=base_score)
     if res.status == "ok":

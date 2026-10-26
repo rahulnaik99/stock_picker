@@ -11,6 +11,16 @@ One JSON object: `stock` (symbol, company, sub_sector, as_of), `baseline`, and `
   and `strength` (0-100: touches + volume + recency + confluence). Higher strength = a zone more likely to react.
 - `nearest_demand` / `nearest_supply`: the closest zone on each side.
 - `price_action`: `position` ("at_demand" / "at_supply" / "mid_range"), `last3_up`, `close_location`, `reclaim_ema20`, `lost_ema20`.
+- `volume_context`: `trend` (expanding / normal / contracting vs the 20-bar median), `ratio` (recent-5-bar avg / median),
+  `high_volume_last_bar`. Expanding volume on a bounce from demand = conviction. Contracting volume on a bounce = weak.
+  Same logic inverted for supply rejections. A zone touched on high volume is more significant than one on thin volume.
+- `event_context` — use this to judge setup quality and conviction, NOT to predict outcomes:
+  - `upcoming_catalysts`: results / dividends / board meetings within 45 days. Dividend near a demand zone = support buy
+    potential. Results near a key zone = volatility catalyst — lower conviction for the setup; wait for the reaction.
+  - `block_bulk_deals` / `deal_lean`: stock-specific institutional activity. Large block BUY at/near demand = accumulation
+    (bull confluence). Block SELL near supply = distribution (bear confluence). One deal is not a trend.
+  - `fii_dii` / `lean`: **market-wide only** — say "market-wide FII net-buying tailwind" not "FII buying this stock."
+  - Never invent an event date or a deal that is not in the input.
 - `mtf`: multi-timeframe read. `mtf.bias` gives each timeframe's bias (`1d` daily = structure, `1h` = swing, `15m` =
   timing) and `mtf.alignment` is "bullish_aligned" / "bearish_aligned" / "conflicting" / "mixed". `timeframes` holds the
   per-frame zones. Aligned timeframes strengthen the read; a daily demand bounce with 1h/15m still falling is early.
@@ -29,8 +39,9 @@ One JSON object: `stock` (symbol, company, sub_sector, as_of), `baseline`, and `
   buffer), the `target` (the opposite zone) and the `quantity` (sized so a stop-out loses only `risk_amount`) make sense -
   or say plainly if the plan is poor (e.g. `reward_to_risk_below_1`, mid-range with no zone, conflicting timeframes).
   Do NOT change the numbers; critique them. If `bias` is "none", say there is no clean trade and keep the score near baseline.
-- Zone quality matters: more touches, heavy volume, recency and EMA/VWAP confluence (high `strength`) = a stronger
-  reaction point. "mid_range" with no confluence is genuinely indecisive: keep the adjustment small.
+- **Events + flows alignment**: do the upcoming catalysts and institutional flows strengthen or weaken the zone setup?
+  A demand bounce with FII net-buying and a dividend approaching = high-conviction long. The same bounce with a results
+  date in 3 days = wait for the result; take a smaller position or pass. Supply rejection with block SELL deals = strong.
 
 # Scoring
 - `baseline.score` is a code-computed NET of a bull score minus a bear score. You return `score_adjustment` in
@@ -52,7 +63,8 @@ One JSON object: `stock` (symbol, company, sub_sector, as_of), `baseline`, and `
     "mtf_alignment": "bullish_aligned | bearish_aligned | conflicting | mixed",
     "bull_case": "the long setup in 1-2 sentences: which demand zone, which timeframes back it, target = nearest supply",
     "bear_case": "the short setup in 1-2 sentences: which supply zone, which timeframes back it, target = nearest demand",
-    "trade_plan_justification": "1-3 sentences on why the entry / stop / target / quantity are reasonable (or why the plan is weak). Quote the numbers; never change them.",
+    "trade_plan_justification": "1-3 sentences justifying entry/stop/target/qty (quote numbers; never change them).",
+    "events_flow_read": "1 sentence: how the upcoming catalysts + FII/deals align with (or undermine) the zone setup.",
     "lean": "bullish | bearish | neutral",
     "position": "at_demand | at_supply | mid_range",
     "key_demand": {"low": 0, "high": 0, "strength": 0},

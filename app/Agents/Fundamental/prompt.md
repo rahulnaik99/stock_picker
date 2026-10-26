@@ -17,7 +17,14 @@ One JSON object: `stock` (symbol, company, sector, as_of) and `evidence`:
 - `fundamental_view` — the SAME filed numbers pre-digested into three horizons (use these as the backbone of your assessment):
   - `long_term_3y`: last up-to-3 complete fiscal years (Apr-Mar) of revenue / PAT / EPS, year-on-year growth, 3-year PAT & revenue CAGR, and a `trend` (improving / deteriorating / mixed). This is the DURABLE track record.
   - `short_term_3q`: the last 3 quarters' revenue / PAT / EPS, QoQ changes and a `trend`. This is RECENT momentum.
-  - `forward`: `upcoming_catalysts` (scheduled future board meetings / results — never invent dates), `recent_dividends`, `corporate_actions` (dividend/buyback/split/fundraise/M&A/rating events) and `news_lean` (an unverified +/- headline tally).
+  - `divergence` — pre-computed from code: the relationship between LT and ST:
+    - **`turnaround`** (LT bear + ST bull): the company may be reversing a multi-year decline. Score cautiously positive
+      but require ≥ 2 consecutive quarters of improvement before raising conviction — one good quarter is not a trend.
+    - **`slowdown`** (LT bull + ST bear): established growth is decelerating. Lower conviction for bullish calls even if
+      the long-term record is strong; ask whether the 3Q deceleration is structural or a one-off.
+    - **`sustained_growth`** (both improving): the most durable bullish signal — weight it higher than a single-quarter spike.
+    - **`sustained_decline`** (both deteriorating): the most convincing bearish read — don't attribute it to one-offs.
+    - **`mixed`**: neither LT nor ST gives a clear directional verdict; lean on events, news and asset quality.
 - `news`: headline leads only (not verified facts).
 - `data_freshness` (optional): if present, its `warning` means a results quarter has been FILED but is not yet in the numeric series — obey it.
 - `tool_status`: which sources worked. Anything not `ok` is MISSING, not neutral.
@@ -51,8 +58,9 @@ One JSON object: `stock` (symbol, company, sector, as_of) and `evidence`:
   "missing_data": ["GNPA/NNPA not in retrieved filings"],
   "extra": {
     "events": [{"event_id": "abc123", "impact_score": 2, "reasoning": "short"}],
-    "long_term": "1-2 sentences on the 3-year track record (quote CAGR / YoY)",
-    "short_term": "1-2 sentences on the last 3 quarters' momentum (quote QoQ / latest PAT)",
+    "long_term": "1-2 sentences on the 3-year track record (quote CAGR / YoY; note if LT and ST diverge)",
+    "short_term": "1-2 sentences on the last 3 quarters' momentum (quote QoQ / latest PAT; note if diverges from LT)",
+    "divergence_read": "1 sentence: turnaround / slowdown / sustained / mixed — and what it means for conviction",
     "outlook": "1-2 sentences: upcoming catalysts + dividend/action/news lean, and the net forward view",
     "upcoming_catalysts": [{"what": "Q2 results board meeting", "date": "2026-10-28", "source_url": "..."}],
     "expected_vs_surprise": "in line | positive surprise | negative surprise | unknown"
