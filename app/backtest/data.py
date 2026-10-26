@@ -24,18 +24,32 @@ DEFAULT_UNIVERSE = [
 
 
 def load_yahoo_daily(symbols: Sequence[str], start: str, end: str) -> dict[str, pd.DataFrame]:
-    """Return {symbol -> DataFrame[time, open, high, low, close, volume]} (ascending, adjusted) for each symbol
-    that returned usable data. Symbols with no data are skipped (and absent from the dict)."""
+    """Return {symbol -> DataFrame[time, open, high, low, close, volume]} for each symbol with usable data."""
     import yfinance as yf
 
     syms = [clean_symbol(s) for s in symbols]
+    panel: dict[str, pd.DataFrame] = {}
+    if len(syms) == 1:
+        # yf.Ticker.history() always returns a clean flat DataFrame - no MultiIndex surprises
+        sym, tk = syms[0], yahoo_symbol(syms[0])
+        try:
+            raw = yf.Ticker(tk).history(start=start, end=end, auto_adjust=True)
+            if raw is not None and not raw.empty:
+                df = raw.reset_index().rename(columns={"Date": "time", "Datetime": "time", "Open": "open",
+                                                       "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+                df = _normalise(df)
+                if df is not None and len(df):
+                    panel[sym] = df
+        except Exception:  # noqa: BLE001
+            pass
+        return panel
+    # multiple symbols: yf.download with group_by="ticker" returns a MultiIndex DataFrame
     tickers = [yahoo_symbol(s) for s in syms]
     raw = yf.download(tickers, start=start, end=end, interval="1d", auto_adjust=True,
                       group_by="ticker", progress=False, threads=True)
-    panel: dict[str, pd.DataFrame] = {}
     for sym, tk in zip(syms, tickers):
         try:
-            sub = raw[tk] if len(tickers) > 1 else raw
+            sub = raw[tk]
         except (KeyError, TypeError):
             continue
         df = _normalise(sub)

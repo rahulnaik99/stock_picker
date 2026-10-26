@@ -30,23 +30,38 @@ def main(argv: list[str] | None = None) -> int:
     sym = a.symbol.strip().upper()
     out = a.out or f"output/{sym}.png"
 
-    from app.backtest import data as btdata
     from app.mcp_server.tools import indicators
     from app.viz.chart import plot_trade_chart
 
-    print(f"Loading daily candles for {sym} {start}..{end} from Yahoo ...")
-    panel = btdata.load_yahoo_daily([sym], start, end)
-    if sym not in panel or len(panel[sym]) < 60:
-        print(f"Not enough daily data for {sym} (need >= 60 bars). Check the symbol / dates / network.")
-        return 2
-    df = panel[sym]
-    zones = indicators.demand_supply_zones(df.tail(420), None)
+    # Try FYERS first (the live data source the app already uses); only fall back to Yahoo if the token
+    # isn't set or has expired, so you can still run the chart offline without a fresh login.
+    daily = None
+    provider = None
+    try:
+        from app.mcp_server.tools.market import fetch_candles
+        _df, provider = fetch_candles(sym, "D", 420, None)
+        if len(_df) >= 60:
+            daily = _df
+            print(f"Loaded {len(daily)} bars from {provider}")
+    except Exception as _exc:
+        print(f"FYERS not available ({type(_exc).__name__}: {str(_exc)[:80]}), falling back to Yahoo ...")
+    if daily is None:
+        from app.backtest import data as btdata
+        panel = btdata.load_yahoo_daily([sym], start, end)
+        if sym not in panel or len(panel[sym]) < 60:
+            print(f"Not enough data for {sym}. Ensure your FYERS token is set (`python -m scripts.fyers_login`) "
+                  f"or check Yahoo connectivity / the date range.")
+            return 2
+        daily = panel[sym]
+        provider = "yahoo"
+    zones = indicators.demand_supply_zones(daily.tail(420), None)
     plan = indicators.build_trade_plan(zones, capital=a.capital, risk_pct=a.risk_pct)
     Path(out).parent.mkdir(parents=True, exist_ok=True)
-    plot_trade_chart(df, zones, plan, out, title=f"{sym}  (EMA stack: {zones.get('ema_stack')})", lookback=a.lookback)
+    plot_trade_chart(daily, zones, plan, out,
+                     title=f"{sym}  [{provider}]  EMA stack: {zones.get('ema_stack')}", lookback=a.lookback)
     print(f"Wrote: {out}")
-    print(f"Plan: {plan.get('bias')}  entry {plan.get('entry')} / SL {plan.get('stop_loss')} / target {plan.get('target')} "
-          f"| R:R {plan.get('risk_reward')} qty {plan.get('quantity')}")
+    print(f"Plan: {plan.get('bias')}  entry {plan.get('entry')} / SL {plan.get('stop_loss')} / "
+          f"target {plan.get('target')}  |  R:R {plan.get('risk_reward')}  qty {plan.get('quantity')}")
     return 0
 
 
