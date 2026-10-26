@@ -40,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-rr", type=float, default=0.0, help="skip trade setups whose reward:risk is below this")
     p.add_argument("--target-r", type=float, default=0.0, help="fixed take-profit at N*risk instead of the opposite zone")
     p.add_argument("--trail-r", type=float, default=0.0, help="trail the stop N*risk behind the best price (let winners run)")
+    p.add_argument("--regime", choices=["off", "ema200"], default="off",
+                   help="ema200 = trade only with the 200-day trend (longs above / shorts below); off = both")
+    p.add_argument("--cost-bps", type=float, default=0.0, help="per-side cost (brokerage+slippage+tax) in bps; nets off P&L")
     p.add_argument("--benchmark", default="", help="buy&hold benchmark symbol; default = equal-weight basket of the universe")
     p.add_argument("--out", default="output/backtest", help="output path prefix (writes .md and .csv)")
     a = p.parse_args(argv)
@@ -79,10 +82,12 @@ def main(argv: list[str] | None = None) -> int:
 
         trs = bttrades.run_trade_portfolio(panel, dates, capital=a.capital, risk_pct=a.risk_pct, max_bars=a.hold_cap,
                                            entry_mode=a.entry_mode, allow_short=not a.no_short,
-                                           min_rr=a.min_rr, target_r=a.target_r, trail_r=a.trail_r)
+                                           min_rr=a.min_rr, target_r=a.target_r, trail_r=a.trail_r,
+                                           regime_filter=a.regime, cost_bps=a.cost_bps)
         tsum = bttrades.summarize_portfolio(trs, a.capital)
         bench = bttrades.benchmark_buy_and_hold(panel, a.capital, a.benchmark or None)
-        knobs = {"min_rr": a.min_rr, "target_r": a.target_r, "trail_r": a.trail_r}
+        knobs = {"min_rr": a.min_rr, "target_r": a.target_r, "trail_r": a.trail_r,
+                 "regime": a.regime, "cost_bps": a.cost_bps}
         tmd = bttrades.portfolio_to_markdown(tsum, a.risk_pct, a.entry_mode, knobs=knobs, benchmark=bench)
         tmd_path = out.with_name(out.stem + "_trades").with_suffix(".md")
         tcsv_path = out.with_name(out.stem + "_trades").with_suffix(".csv")

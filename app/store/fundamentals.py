@@ -158,6 +158,60 @@ def compute_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def _sum(vals: list[Any]) -> float | None:
+    present = [v for v in vals if isinstance(v, (int, float))]
+    return round(sum(present), 2) if present else None
+
+
+def _trend(series: list[Any]) -> str:
+    xs = [v for v in series if isinstance(v, (int, float))]
+    if len(xs) < 2:
+        return "unknown"
+    if xs[-1] > xs[0] and all(b >= a for a, b in zip(xs, xs[1:])):
+        return "improving"
+    if xs[-1] < xs[0] and all(b <= a for a, b in zip(xs, xs[1:])):
+        return "deteriorating"
+    return "mixed"
+
+
+def horizon_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Long-term (last 3 complete fiscal years, Apr-Mar) and short-term (last 3 quarters) views of the series.
+    Fiscal year of a quarter ending month m, year y = y if m <= 3 else y+1 (so Jun/Sep/Dec/Mar roll into one FY)."""
+    if not rows:
+        return {"long_term_3y": None, "short_term_3q": None}
+    fy: dict[int, list[dict[str, Any]]] = {}
+    for r in rows:
+        d = date.fromisoformat(r["period_end"])
+        fy.setdefault(d.year if d.month <= 3 else d.year + 1, []).append(r)
+    years = []
+    for y in sorted(fy):
+        qs = fy[y]
+        if len(qs) < 4:                     # skip partial years (incomplete history / FY still in progress)
+            continue
+        years.append({"fy": f"FY{y}", "revenue": _sum([q.get("revenue") for q in qs]),
+                      "pat": _sum([q.get("pat") for q in qs]), "eps": _sum([q.get("eps") for q in qs])})
+    years = years[-3:]
+    long_term = None
+    if years:
+        def _cagr(key: str) -> float | None:
+            a, b = years[0].get(key), years[-1].get(key)
+            if len(years) >= 2 and isinstance(a, (int, float)) and isinstance(b, (int, float)) and a > 0:
+                return round(((b / a) ** (1 / (len(years) - 1)) - 1) * 100, 2)
+            return None
+        yoy = [{"fy": b["fy"], "pat_yoy": _pct(b.get("pat"), a.get("pat")),
+                "revenue_yoy": _pct(b.get("revenue"), a.get("revenue"))} for a, b in zip(years, years[1:])]
+        long_term = {"years": years, "pat_cagr_pct": _cagr("pat"), "revenue_cagr_pct": _cagr("revenue"),
+                     "yoy": yoy, "trend": _trend([y.get("pat") for y in years])}
+    last3 = rows[-3:]
+    short_term = {
+        "quarters": [{"period_end": q["period_end"], "revenue": q.get("revenue"), "pat": q.get("pat"),
+                      "eps": q.get("eps")} for q in last3],
+        "pat_qoq_pct": [_pct(b.get("pat"), a.get("pat")) for a, b in zip(last3, last3[1:])],
+        "trend": _trend([q.get("pat") for q in last3]),
+    }
+    return {"long_term_3y": long_term, "short_term_3q": short_term}
+
+
 def _gaps(rows: list[dict[str, Any]]) -> list[str]:
     gaps = []
     for a, b in zip(rows, rows[1:]):

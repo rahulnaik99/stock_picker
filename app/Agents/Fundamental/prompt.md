@@ -14,16 +14,21 @@ One JSON object: `stock` (symbol, company, sector, as_of) and `evidence`:
 - `yf_fundamentals`: Yahoo valuation ratios (current snapshot, unofficial; cross-check against filings).
 - `bank_kpis_nse` (lenders only): asset-quality / capital KPIs parsed from the NSE results **XBRL** (authoritative) — `kpis` may hold `gross_npa_pct`, `net_npa_pct`, `crar_pct`, `interest_earned`, `interest_expended`, `nii`, `pcr_pct`. Check its `status`: `ok`/`partial` = usable (quote the values present); `unavailable`/`error` means the XBRL could not be parsed — then GNPA/NNPA/CRAR are MISSING (list them under `missing_data`), do not infer them.
 - `bank_kpis_yahoo` (optional): recent NII / net income / EPS (INR crore) from Yahoo — a fallback NII source; context only, cross-check filings.
+- `fundamental_view` — the SAME filed numbers pre-digested into three horizons (use these as the backbone of your assessment):
+  - `long_term_3y`: last up-to-3 complete fiscal years (Apr-Mar) of revenue / PAT / EPS, year-on-year growth, 3-year PAT & revenue CAGR, and a `trend` (improving / deteriorating / mixed). This is the DURABLE track record.
+  - `short_term_3q`: the last 3 quarters' revenue / PAT / EPS, QoQ changes and a `trend`. This is RECENT momentum.
+  - `forward`: `upcoming_catalysts` (scheduled future board meetings / results — never invent dates), `recent_dividends`, `corporate_actions` (dividend/buyback/split/fundraise/M&A/rating events) and `news_lean` (an unverified +/- headline tally).
 - `news`: headline leads only (not verified facts).
 - `data_freshness` (optional): if present, its `warning` means a results quarter has been FILED but is not yet in the numeric series — obey it.
 - `tool_status`: which sources worked. Anything not `ok` is MISSING, not neutral.
 
-# What to assess
-1. Results: use `quarterly_results.metrics`: direction and consistency of revenue, operating profit and PAT over the last 1-6 quarters and year-on-year, streaks, margin change. One strong quarter after several weak ones is not a trend. Mention asset-quality or margin commentary found in announcements.
-2. Dividends, buybacks, splits, bonus, rights, fundraising, M&A: judge the context (sustainability, payout, dilution). **A dividend alone is not bullish.**
-3. Board decisions and announced catalysts, including dates of upcoming results / board meetings / ex-dates. Never invent a date: only report dates present in the evidence.
-4. Regulatory or credit-rating actions, management changes.
-5. Valuation (P/E, P/B, ROE) only as supporting context. For lenders, asset-quality/capital (GNPA%, NNPA%, CRAR, NII, PCR) come from `bank_kpis_nse` (XBRL) when its `status` is ok/partial — quote them and factor asset-quality direction into your judgement. If `bank_kpis_nse` is absent or `unavailable`/`error`, list the missing KPIs under `missing_data`; never source them from Yahoo or memory.
+# What to assess — explicitly across THREE horizons
+1. **Long term (3 years)** — from `fundamental_view.long_term_3y`: is the multi-year PAT/revenue track record growing (CAGR, consistent YoY) or stalling/declining? This anchors conviction; a single good quarter does not override a weak 3-year trend, and vice-versa.
+2. **Short term (last 3 quarters)** — from `fundamental_view.short_term_3q` and `quarterly_results.metrics` (QoQ/YoY/streak): is recent momentum accelerating, flat, or rolling over? Flag divergences (e.g. strong 3Y but weak last 3Q, or a turnaround).
+3. **Forward / events** — from `fundamental_view.forward`: upcoming results/board catalysts (dates from evidence only), dividends/buybacks/fundraising/M&A/rating actions (judge sustainability & dilution — **a dividend alone is not bullish**), and the news lean (headlines move the score by at most 2 points; label unverified). Block/bulk-deal flow is covered by the Investment Trend agent — do not double-count it here.
+4. For lenders, asset-quality/capital (GNPA%, NNPA%, CRAR, NII, PCR) come from `bank_kpis_nse` (XBRL) when `status` is ok/partial — quote them and factor the asset-quality direction into every horizon. If absent/`unavailable`/`error`, list the missing KPIs under `missing_data`; never source them from Yahoo or memory.
+5. Valuation (P/E, P/B, ROE) only as supporting context.
+- NEVER recompute the numbers; quote them. One strong quarter after several weak ones is not a trend.
 
 # Rules
 - Use only facts present in the input. Cite them in `evidence` with `claim`, `source_url`, `published_at`.
@@ -46,6 +51,9 @@ One JSON object: `stock` (symbol, company, sector, as_of) and `evidence`:
   "missing_data": ["GNPA/NNPA not in retrieved filings"],
   "extra": {
     "events": [{"event_id": "abc123", "impact_score": 2, "reasoning": "short"}],
+    "long_term": "1-2 sentences on the 3-year track record (quote CAGR / YoY)",
+    "short_term": "1-2 sentences on the last 3 quarters' momentum (quote QoQ / latest PAT)",
+    "outlook": "1-2 sentences: upcoming catalysts + dividend/action/news lean, and the net forward view",
     "upcoming_catalysts": [{"what": "Q2 results board meeting", "date": "2026-10-28", "source_url": "..."}],
     "expected_vs_surprise": "in line | positive surprise | negative surprise | unknown"
   }

@@ -99,6 +99,30 @@ def test_detail_rows_normalises_shapes():
     assert fundamentals._detail_rows({"income": "1"}) == [{"income": "1"}]
 
 
+def test_horizon_metrics_long_and_short_term():
+    import app.store.fundamentals as fq
+    # 12 quarters = 3 fiscal years (Apr-Mar), growing PAT
+    quarters = []
+    ends = ["2023-06-30", "2023-09-30", "2023-12-31", "2024-03-31",
+            "2024-06-30", "2024-09-30", "2024-12-31", "2025-03-31",
+            "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31"]
+    for i, e in enumerate(ends):
+        quarters.append({"period_end": e, "revenue": 1000 + i * 50, "pat": 100 + i * 10, "eps": 1.0 + i * 0.1})
+    h = fq.horizon_metrics(quarters)
+    lt = h["long_term_3y"]
+    assert [y["fy"] for y in lt["years"]] == ["FY2024", "FY2025", "FY2026"]      # Jun2023..Mar2024 -> FY2024
+    assert lt["years"][0]["pat"] == round(100 + 110 + 120 + 130, 2)              # FY2024 = first 4 quarters' PAT
+    assert lt["pat_cagr_pct"] is not None and lt["trend"] == "improving"
+    st = h["short_term_3q"]
+    assert [q["period_end"] for q in st["quarters"]] == ["2025-09-30", "2025-12-31", "2026-03-31"]
+    assert st["trend"] == "improving" and len(st["pat_qoq_pct"]) == 2
+
+
+def test_horizon_metrics_empty():
+    import app.store.fundamentals as fq
+    assert fq.horizon_metrics([]) == {"long_term_3y": None, "short_term_3q": None}
+
+
 def test_parse_yahoo_statement_lender_ppop_and_ebitda():
     cols = [pd.Timestamp("2026-09-30"), pd.Timestamp("2026-06-30")]
     df = pd.DataFrame({cols[0]: [3.1e11, 1.0e11, 7e10, 2e11, 41.0, 2e10], cols[1]: [3.0e11, 0.9e11, 6e10, 1.9e11, 38.0, 1e10]},

@@ -39,7 +39,11 @@ def trader_plan_asof(daily: pd.DataFrame, asof: pd.Timestamp, capital: float = 1
         z = indicators.demand_supply_zones(d, None)
     except Exception:  # noqa: BLE001
         return None
-    return indicators.build_trade_plan(z, capital=capital, risk_pct=risk_pct)
+    plan = indicators.build_trade_plan(z, capital=capital, risk_pct=risk_pct)
+    if plan:                                  # stash the as-of close + EMA200 for the regime gate (no recompute)
+        plan["_close"] = z.get("close")
+        plan["_ema200"] = z.get("ema200")
+    return plan
 
 
 # --------------------------------------------------------------------------- pure exit mechanics
@@ -116,15 +120,19 @@ def _limit_fill(highs: Sequence[float], lows: Sequence[float], start: int, bias:
 def run_trade_portfolio(panel: dict[str, pd.DataFrame], rebalance_dates: Sequence[Any], capital: float = 100000.0,
                         risk_pct: float = 1.0, max_bars: int = 63, entry_mode: str = "market",
                         entry_window: int = 5, allow_short: bool = True, max_positions: int | None = None,
-                        min_rr: float = 0.0, target_r: float = 0.0, trail_r: float = 0.0) -> list[dict[str, Any]]:
-    """Event-driven, no-leverage, compounding portfolio. Returns executed trades (realised entry/qty/P&L + dates).
+                        min_rr: float = 0.0, target_r: float = 0.0, trail_r: float = 0.0,
+                        regime_filter: str = "off", cost_bps: float = 0.0) -> list[dict[str, Any]]:
+    """Event-driven, no-leverage, compounding portfolio. Returns executed trades (realised entry/qty/net P&L + dates).
 
     Risk per trade = risk_pct of CURRENT equity; quantity never exceeds what equity can fund; total open notional
-    <= equity; at most one open position per symbol. Trade-quality / exit knobs:
-    - `min_rr`   : skip setups whose zone reward-to-risk is below this (filters the close-target, poor-asymmetry trades).
-    - `target_r` : if > 0, take profit at a fixed `target_r * risk` instead of the opposite zone.
-    - `trail_r`  : if > 0, trail the stop `trail_r * risk` behind the best price ("let winners run"); with target_r == 0
-                   there is no hard cap, so the trail decides the exit."""
+    <= equity; at most one open position per symbol. Trade-quality / exit / realism knobs:
+    - `min_rr`        : skip setups whose zone reward-to-risk is below this.
+    - `target_r`      : fixed take-profit at N*risk instead of the opposite zone.
+    - `trail_r`       : trail the stop N*risk behind the best price ("let winners run").
+    - `regime_filter` : 'ema200' = trade only WITH the 200-day trend (longs only when close > EMA200, shorts only
+                        when close < EMA200); 'off' = both directions always. Kills counter-trend trades in a bull/bear.
+    - `cost_bps`      : per-side cost (brokerage + slippage + taxes) in basis points of notional, charged on entry AND
+                        exit and deducted from P&L, so every figure is NET of costs."""
     syms: dict[str, tuple[pd.DataFrame, list, np.ndarray, np.ndarray, np.ndarray]] = {}
     for sym, df in panel.items():
         d = df.sort_values("time").reset_index(drop=True)
@@ -159,6 +167,13 @@ def run_trade_portfolio(panel: dict[str, pd.DataFrame], rebalance_dates: Sequenc
         bias = plan["bias"]
         if bias == "short" and not allow_short:
             continue
+        # Regime gate: only trade with the 200-day trend (drops the counter-trend book).
+        if regime_filter == "ema200":
+            e200, px0 = plan.get("_ema200"), plan.get("_close")
+            if e200 is not None and px0 is not None:
+                up = px0 > e200
+                if (bias == "long" and not up) or (bias == "short" and up):
+                    continue
         if max_positions is not None and len(open_pos) >= max_positions:
             continue
         d, times, H, L, C = syms[sym]
@@ -198,8 +213,9 @@ def run_trade_portfolio(panel: dict[str, pd.DataFrame], rebalance_dates: Sequenc
 
         outcome, exit_price, exit_index = resolve_exit(H, L, C, fill_index, bias, stop, target, max_bars,
                                                        trail_r=(trail_r or None), psr=psr)
-        pnl_ps = (exit_price - fill_price) if bias == "long" else (fill_price - exit_price)
-        pnl = round(pnl_ps * qty, 2)
+        gross_ps = (exit_price - fill_price) if bias == "long" else (fill_price - exit_price)
+        cost = (fill_price + exit_price) * qty * cost_bps / 10000.0   # per-side bps on entry + exit notional
+        pnl = round(gross_ps * qty - cost, 2)
         open_pos[sym] = {"exit_date": times[exit_index], "pnl": pnl, "notional": round(qty * fill_price, 2)}
         trades.append({
             "entry_date": times[fill_index], "exit_date": times[exit_index], "symbol": sym, "bias": bias,
@@ -207,8 +223,8 @@ def run_trade_portfolio(panel: dict[str, pd.DataFrame], rebalance_dates: Sequenc
             "target": None if target is None else round(target, 2),
             "risk_reward": round((reward / psr) if reward else (zone_reward / psr), 2), "quantity": qty,
             "notional": round(qty * fill_price, 2), "outcome": outcome, "exit_price": round(exit_price, 2),
-            "bars_held": exit_index - fill_index, "pnl_per_share": round(pnl_ps, 2), "pnl": pnl,
-            "r_multiple": round(pnl_ps / psr, 3)})
+            "bars_held": exit_index - fill_index, "cost": round(cost, 2),
+            "pnl_per_share": round(gross_ps, 2), "pnl": pnl, "r_multiple": round((pnl / qty) / psr, 3)})
     for pos in open_pos.values():             # close any still-open at the loop end
         equity += pos["pnl"]
     return trades
@@ -267,6 +283,7 @@ def summarize_portfolio(trades: list[dict[str, Any]], capital: float) -> dict[st
         "avg_loss_r": round(mean([t["r_multiple"] for t in losses]), 3) if losses else None,
         "avg_risk_reward": round(mean([t["risk_reward"] for t in trades]), 2),
         "avg_bars_held": round(mean([t["bars_held"] for t in trades]), 1),
+        "total_cost": round(sum(t.get("cost", 0.0) for t in trades), 2),
         "open_at_cap": sum(1 for t in trades if t["outcome"] == "open"),
         "outcomes": {k: sum(1 for t in trades if t["outcome"] == k) for k in ("target", "trail", "stop", "open")},
         "by_side": {"long": sum(1 for t in trades if t["bias"] == "long"),
@@ -316,14 +333,17 @@ def portfolio_to_markdown(summary: dict[str, Any], risk_pct: float, entry_mode: 
     if knobs:
         parts = [f"min_rr={knobs.get('min_rr')}" if knobs.get("min_rr") else "",
                  f"target={knobs.get('target_r')}R" if knobs.get("target_r") else "",
-                 f"trail={knobs.get('trail_r')}R" if knobs.get("trail_r") else ""]
+                 f"trail={knobs.get('trail_r')}R" if knobs.get("trail_r") else "",
+                 f"regime={knobs.get('regime')}" if knobs.get("regime") and knobs.get("regime") != "off" else "",
+                 f"cost={knobs.get('cost_bps')}bps/side" if knobs.get("cost_bps") else ""]
         knob_txt = "  |  " + ", ".join(p for p in parts if p) if any(parts) else ""
     L = ["# Trade backtest - Trader plan, realistic portfolio simulation", "",
          f"- Capital ₹{s['capital']:,.0f}, risk {risk_pct}% of **current equity**/trade, **{entry_mode}** entry, "
          f"no leverage, 1 position per symbol{knob_txt}", f"- Period: {s['period'][0]} -> {s['period'][1]}", "",
          f"- Trades: **{s['n_trades']}** ({s['by_side']['long']} long / {s['by_side']['short']} short); "
-         f"outcomes {s['outcomes']}  |  avg planned R:R {s['avg_risk_reward']}, avg hold {s['avg_bars_held']} bars",
-         f"- **Final equity ₹{s['final_equity']:,.0f}**  (total **{s['total_return_pct']:+.1f}%**, **CAGR {s['cagr_pct']:+.1f}%**)",
+         f"outcomes {s['outcomes']}  |  avg planned R:R {s['avg_risk_reward']}, avg hold {s['avg_bars_held']} bars"
+         f"  |  costs ₹{s.get('total_cost', 0):,.0f}",
+         f"- **Final equity ₹{s['final_equity']:,.0f}**  (total **{s['total_return_pct']:+.1f}%**, **CAGR {s['cagr_pct']:+.1f}%**, net of costs)",
          f"- **Max drawdown {s['max_drawdown_pct']:.1f}%**  |  **profit factor {s['profit_factor']}**",
          f"- Win rate {_p(s['win_rate'])}  |  expectancy **{s['expectancy_r']} R**  (avg win {s['avg_win_r']}R, avg loss {s['avg_loss_r']}R)"]
     if benchmark:

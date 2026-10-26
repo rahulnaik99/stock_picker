@@ -18,6 +18,36 @@ def news_query(company: str) -> str:
     return f'"{company}" results OR dividend OR board OR RBI'
 
 
+_POS_WORDS = ("profit up", "profit rises", "surge", "jump", "record", "beats", "upgrade", "strong", "growth",
+              "rally", "gain", "high", "buy", "outperform", "raises", "robust")
+_NEG_WORDS = ("profit fall", "falls", "drop", "decline", "loss", "downgrade", "fraud", "penalty", "probe",
+              "cut", "weak", "slump", "sell", "miss", "warning", "lawsuit", "default", "stake sale")
+_ACTION_TYPES = ("dividend", "buyback", "split_bonus", "fundraise", "merger_acquisition", "credit_rating")
+
+
+def _news_lean(news: dict[str, Any]) -> dict[str, Any]:
+    """Naive +/- tally over headline text (unverified sentiment, context only)."""
+    items = (news.get("data") or []) if news.get("status") == "ok" else []
+    pos = sum(any(w in (it.get("title") or "").lower() for w in _POS_WORDS) for it in items)
+    neg = sum(any(w in (it.get("title") or "").lower() for w in _NEG_WORDS) for it in items)
+    lean = "positive" if pos > neg else "negative" if neg > pos else "neutral"
+    return {"headlines": len(items), "positive": pos, "negative": neg, "lean": lean,
+            "note": "headline keyword tally; unverified, context only"}
+
+
+def _forward_view(events: list[dict[str, Any]], as_of: str | None, fund: dict[str, Any], news: dict[str, Any]) -> dict[str, Any]:
+    """Forward-looking digest: scheduled catalysts, recent dividends and corporate actions, plus the news lean."""
+    from datetime import date as _date
+    today = parse_as_of(as_of).date() if as_of else _date.today()
+    upcoming = [{"what": e.get("event_summary", "")[:90], "date": e.get("event_date"), "type": e.get("event_type")}
+                for e in events if e.get("event_status") == "scheduled" and (e.get("event_date") or "") >= today.isoformat()][:5]
+    actions = [{"type": e.get("event_type"), "date": e.get("event_date"), "summary": e.get("event_summary", "")[:90]}
+               for e in events if e.get("event_type") in _ACTION_TYPES][:6]
+    divs = (fund.get("data") or {}).get("recent_dividends") if fund.get("status") == "ok" else None
+    return {"upcoming_catalysts": upcoming, "recent_dividends": (divs or [])[-4:],
+            "corporate_actions": actions, "news_lean": _news_lean(news)}
+
+
 def _ratios_only(fund: dict[str, Any]) -> dict[str, Any]:
     """Valuation ratios and dividends only: quarterly numbers come from the stored history (quarterly_fundamentals)."""
     if fund.get("status") != "ok":
@@ -98,6 +128,12 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     kpis = _bank_kpis_yahoo(fund)
     if kpis:
         evidence["bank_kpis_yahoo"] = kpis
+    # Three-horizon view: long-term (3 fiscal years), short-term (last 3 quarters), forward (catalysts/actions/news).
+    from app.store import fundamentals as fq
+    quarters = (qres.get("data") or {}).get("quarters") if qres["status"] == "ok" else None
+    horizons = fq.horizon_metrics(quarters or [])
+    evidence["fundamental_view"] = {"long_term_3y": horizons["long_term_3y"], "short_term_3q": horizons["short_term_3q"],
+                                    "forward": _forward_view(events, as_of, fund, news)}
     if freshness:
         evidence["data_freshness"] = {"warning": freshness}
     metrics_block = (qres.get("data") or {}).get("metrics") if qres["status"] == "ok" else None
@@ -116,4 +152,5 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
         elif qres["data"]["metrics"].get("history_short"):
             res.missing_data.append(f"only {qres['data']['metrics']['quarters_available']} of 16 quarters of results available")
         res.extra["results_metrics"] = (qres.get("data") or {}).get("metrics", {}).get("metrics")
+        res.extra["fundamental_view"] = evidence.get("fundamental_view")
     return res

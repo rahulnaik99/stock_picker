@@ -197,3 +197,42 @@ def test_benchmark_buy_and_hold_math():
     assert b["total_return_pct"] == pytest.approx(25.0, abs=0.5) and b["max_drawdown_pct"] == pytest.approx(0.0, abs=0.01)
     single = bt.benchmark_buy_and_hold({"UP": up, "FLAT": flat}, 100000.0, symbol="UP")
     assert single["label"] == "UP" and single["total_return_pct"] == pytest.approx(50.0, abs=0.5)
+
+
+def _strong(drift, n=340, seed=1):
+    """Strong, low-noise trend (price stays firmly one side of its EMA200) but with a high/low envelope so swing
+    pivots - and therefore zones - still form."""
+    rng = np.random.default_rng(seed)
+    c = 100 * np.exp(np.cumsum(np.full(n, drift) + rng.normal(0, 0.003, n)))
+    t = pd.date_range("2022-01-03", periods=n, freq="B")
+    o = np.concatenate([[c[0]], c[:-1]])
+    return pd.DataFrame({"time": t, "open": o, "high": c * (1 + rng.uniform(0, 0.012, n)),
+                         "low": c * (1 - rng.uniform(0, 0.012, n)), "close": c, "volume": rng.uniform(1e6, 2e6, n)})
+
+
+def test_regime_filter_trades_with_the_trend():
+    # deep in a strong uptrend (price >> EMA200) -> regime makes it long-only
+    up = {f"U{i}": _strong(0.004, seed=i) for i in range(4)}
+    rec_up = bt.run_trade_portfolio(up, [up["U0"]["time"].iloc[i] for i in range(240, 330, 10)],
+                                    max_bars=40, regime_filter="ema200")
+    assert rec_up and all(t["bias"] == "long" for t in rec_up)
+    # on a choppy uptrend, the regime filter strictly cuts the counter-trend (short) book vs no filter
+    noisy_up = {f"N{i}": _noisy(0.0013, seed=i) for i in range(6)}
+    nd = [noisy_up["N0"]["time"].iloc[i] for i in range(210, 312, 8)]
+    off = bt.run_trade_portfolio(noisy_up, nd, max_bars=40, regime_filter="off")
+    on = bt.run_trade_portfolio(noisy_up, nd, max_bars=40, regime_filter="ema200")
+    shorts_off = sum(t["bias"] == "short" for t in off)
+    shorts_on = sum(t["bias"] == "short" for t in on)
+    assert shorts_off > 0 and shorts_on < shorts_off and len(on) <= len(off)
+
+
+def test_costs_reduce_net_pnl_and_equity():
+    panel = {f"S{i}": _noisy(d, seed=i) for i, d in enumerate([0.0016, -0.0016, 0.0008, -0.0008])}
+    dates = [panel["S0"]["time"].iloc[i] for i in range(150, 300, 10)]
+    free = bt.summarize_portfolio(bt.run_trade_portfolio(panel, dates, max_bars=40, cost_bps=0.0), 100000.0)
+    costed_trades = bt.run_trade_portfolio(panel, dates, max_bars=40, cost_bps=25.0)
+    costed = bt.summarize_portfolio(costed_trades, 100000.0)
+    assert free["n_trades"] == costed["n_trades"]                       # costs don't change which trades are taken
+    assert costed["total_cost"] > 0 and all(t["cost"] > 0 for t in costed_trades)
+    assert costed["final_equity"] < free["final_equity"]               # net of costs -> lower equity
+    assert costed["expectancy_r"] < free["expectancy_r"]               # and lower per-trade expectancy
