@@ -73,6 +73,10 @@ class RunRequest(BaseModel):
         default=None, min_length=1, max_length=200,
         description="Optional exact model ID override; for OLMX use the model ID exposed by its server"
     )
+    llm_timeout: int | None = Field(
+        default=None, ge=30, le=1800,
+        description="Per-agent LLM call timeout in seconds. Override LLM_TIMEOUT_SECONDS for slow/large models."
+    )
 
     @field_validator("symbols")
     @classmethod
@@ -116,6 +120,7 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
     s = get_settings()
     original_provider = s.llm_force_provider
     original_model = s.llm_force_model
+    original_timeout = s.llm_timeout_seconds
     original_force_refresh = s.force_refresh
     original_force_refresh_env = os.environ.get("FORCE_REFRESH")
     state["status"] = "running"
@@ -130,9 +135,10 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
             s.llm_force_provider = "stub"
             s.llm_force_model = None
         else:
-            # Always explicitly set (or clear) overrides so a previous run's selection never leaks.
             s.llm_force_provider = request.llm_provider or ""
             s.llm_force_model = (request.llm_model.strip() if request.llm_model else None)
+        if request.llm_timeout:
+            s.llm_timeout_seconds = request.llm_timeout
         if request.force_refresh:
             os.environ["FORCE_REFRESH"] = "1"
             s.force_refresh = True
@@ -170,6 +176,7 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
     finally:
         s.llm_force_provider = original_provider
         s.llm_force_model = original_model
+        s.llm_timeout_seconds = original_timeout
         s.force_refresh = original_force_refresh
         if original_force_refresh_env is None:
             os.environ.pop("FORCE_REFRESH", None)

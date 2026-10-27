@@ -127,9 +127,17 @@ td.reason{white-space:normal;min-width:240px;color:#45506a}
 </div>
 <div class="model-row">
   <select id="modelSelect" class="field" style="flex:1"><option value="">⚙ Default (model_config.json per agent)</option></select>
+  <select id="timeoutSelect" class="field" title="LLM timeout per agent call" style="min-width:85px">
+    <option value="120">120 s</option>
+    <option value="180">180 s</option>
+    <option value="300" selected>300 s</option>
+    <option value="600">600 s</option>
+    <option value="900">15 min</option>
+  </select>
   <button class="secondary" id="refreshModels" title="Re-scan inference servers" style="padding:9px 12px;min-width:0">↻</button>
 </div>
 <div id="modelStatus" class="hint" style="color:var(--muted);font-size:11px;margin-bottom:10px"><span class="loading"></span> Scanning…</div>
+<div class="hint" style="font-size:11px;color:var(--muted);margin-bottom:10px">⏱ Timeout applies per-agent LLM call. Raise it for large/slow models (gemma4, 14B+).</div>
 <div class="controls"><label><input type="checkbox" id="stub"> Demo mode (stub LLM)</label><label><input type="checkbox" id="refresh" checked> Refresh stale data</label><label><input type="checkbox" id="forceRefresh"> Force refresh</label></div>
 <div class="notice" id="notice"></div><div class="run-actions"><span class="selected-count" id="selectionCount">0 stocks selected</span><button id="startRun">▶ Start scoring run</button></div>
 <div class="footer">Scoring is research-only. No orders are placed. Demo mode may still call configured data providers.</div></section>
@@ -198,9 +206,19 @@ async function loadModels(){
     $('modelStatus').textContent='Could not reach inference servers ('+e.message+')';
   }
 }
-$('refreshModels').onclick=loadModels;
+$('modelSelect').addEventListener('change',()=>{
+  const v=$('modelSelect').value;
+  const m=v?JSON.parse(v).model:'';
+  // Auto-suggest a higher timeout for large models (7B+ typically need > 120s on M1)
+  const size=parseInt((m.match(/:(\d+)b/i)||m.match(/(\d+)b/i)||[])[1])||0;
+  const sel=$('timeoutSelect');
+  if(size>=30)      sel.value='900';
+  else if(size>=13) sel.value='600';
+  else if(size>=7)  sel.value='300';
+  else if(size>0)   sel.value='180';
+});
 let universe=[], selected=new Set(), runs=[], activeRunId=null, results=[], pollToken=0;
-const AGENTS=[['fundamental','Fundamental'],['industry','Industry'],['indicator','Indicator'],['trader','Trader'],['investment_trend','Inv. Trend'],['option_chain','Option Chain'],['decision_maker','Decision']];
+const AGENTS=[['fundamental','Fundamental'],['industry','Industry'],['indicator','Indicator'],['trader','Trader'],['rs_agent','RS'],['quant_risk','Q.Risk'],['promoter_intel','Promoter'],['catalyst_quality','Catalyst'],['investment_trend','Inv.Trend'],['option_chain','Options'],['decision_maker','Decision']];
 const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => Number(n||0).toLocaleString();
 function notice(message, show=true){$('notice').textContent=message;$('notice').classList.toggle('show',show)}
@@ -223,7 +241,7 @@ $('agentMatrix').querySelector('tbody').innerHTML=syms.map(sym=>{const row=p.sym
 function renderTokens(t){t=t||{};$('tokIn').textContent=fmt(t.input_tokens);$('tokOut').textContent=fmt(t.output_tokens);$('tokTotal').textContent=fmt(t.total_tokens);const done=t.agents_done||0,total=t.agents_total||0;$('progFill').style.width=(total?Math.round(done/total*100):0)+'%';$('progAgents').textContent=`${done} / ${total} agent tasks done`;const bm=t.by_model||{};$('byModel').innerHTML=Object.keys(bm).map(k=>`<span class="chip">${escapeHtml(k)} · ${fmt((bm[k].input_tokens||0)+(bm[k].output_tokens||0))} tok · ${bm[k].calls||0} calls</span>`).join('')||'<span class="hint">No token usage recorded yet.</span>';}
 async function refreshProgress(id){try{const p=await api(`/api/runs/${encodeURIComponent(id)}/progress`);if(activeRunId!==id)return p;$('liveBadge').textContent=p.status||'—';$('liveBadge').className='badge '+(p.status||'');renderMatrix(p);renderTokens(p.totals);return p}catch(e){return null}}
 async function pollRun(id){const myToken=++pollToken;for(let i=0;i<300&&activeRunId===id&&pollToken===myToken;i++){await new Promise(r=>setTimeout(r,1500));let d;try{d=await api('/api/runs/'+encodeURIComponent(id))}catch(e){notice('Could not poll run status: '+e.message);return}const idx=runs.findIndex(x=>x.run_id===id);if(idx>=0)runs[idx]={...runs[idx],...d};else runs.unshift(d);renderRuns();if(activeRunId===id)$('runSummary').innerHTML=`<p>Status: <span class="badge ${escapeHtml(d.status)}">${escapeHtml(d.status)}</span></p><p class="hint">${escapeHtml(d.total||0)} stocks · ${escapeHtml(d.ranked??'—')} ranked · ${escapeHtml(d.error||'')}</p>`;await refreshProgress(id);if(['completed','failed'].includes(d.status)){if(d.status==='completed')await loadResults(id);else notice('Run failed: '+(d.error||'See server logs'));return}}}
-$('startRun').onclick=async()=>{if(!selected.size){notice('Select at least one stock first.');return}const btn=$('startRun');btn.disabled=true;btn.innerHTML='<span class="loading"></span> Starting…';notice('',false);try{const modelVal=$('modelSelect').value;const modelOverride=modelVal?JSON.parse(modelVal):null;const body={symbols:[...selected],stub:$('stub').checked,refresh:$('refresh').checked,force_refresh:$('forceRefresh').checked,mode:'inprocess',llm_provider:modelOverride?.provider||'',llm_model:modelOverride?.model||null};const d=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});activeRunId=d.run_id;runs.unshift(d);renderRuns();await selectRun(d.run_id);await loadRuns()}catch(e){notice('Could not start run: '+e.message)}finally{btn.disabled=false;btn.textContent='▶ Start scoring run'}};
+$('startRun').onclick=async()=>{if(!selected.size){notice('Select at least one stock first.');return}const btn=$('startRun');btn.disabled=true;btn.innerHTML='<span class="loading"></span> Starting…';notice('',false);try{const modelVal=$('modelSelect').value;const modelOverride=modelVal?JSON.parse(modelVal):null;const timeoutSec=parseInt($('timeoutSelect').value)||300;const body={symbols:[...selected],stub:$('stub').checked,refresh:$('refresh').checked,force_refresh:$('forceRefresh').checked,mode:'inprocess',llm_provider:modelOverride?.provider||'',llm_model:modelOverride?.model||null,llm_timeout:timeoutSec};const d=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});activeRunId=d.run_id;runs.unshift(d);renderRuns();await selectRun(d.run_id);await loadRuns()}catch(e){notice('Could not start run: '+e.message)}finally{btn.disabled=false;btn.textContent='▶ Start scoring run'}};
 $('reloadRuns').onclick=loadRuns;$('viewResults').onclick=()=>activeRunId&&loadResults(activeRunId);$('validOnly').onchange=()=>activeRunId&&loadResults(activeRunId);
 async function loadResults(id){try{const d=await api(`/api/runs/${encodeURIComponent(id)}/results${$('validOnly').checked?'?valid_only=true':''}`);results=d.results||[];renderResults();$('resultsHint').textContent=`Run ${id} · ${results.length} result${results.length===1?'':'s'}`;$('downloadCsv').disabled=!results.length}catch(e){if(/not complete/i.test(e.message))return;$('resultsTable').innerHTML=`<div class="empty">Results unavailable: ${escapeHtml(e.message)}</div>`;$('downloadCsv').disabled=true}}
 function renderResults(){if(!results.length){$('metrics').style.display='none';$('resultsTable').innerHTML='<div class="empty">No result rows available for this run.</div>';return}const valid=results.filter(r=>r.valid===true||r.valid===1).length;$('metrics').style.display='grid';$('metrics').innerHTML=[['Ranked',results.length],['Valid',valid],['Invalid',results.length-valid],['Avg. score',(results.reduce((a,r)=>a+(Number(r.final_score??r.score)||0),0)/results.length).toFixed(2)]].map(([a,b])=>`<div class="metric"><span>${a}</span><strong>${b}</strong></div>`).join('');const cols=[['rank','Rank'],['symbol','Symbol'],['company_name','Company'],['final_score','Score'],['direction','Direction'],['trade_status','Trade status'],['data_completeness','Completeness'],['reasoning_summary','Reasoning']];$('resultsTable').innerHTML=`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${c[1]}</th>`).join('')}<th>Chart</th></tr></thead><tbody>${results.map(r=>`<tr>${cols.map(([k])=>{let v=r[k];if(k==='final_score'){const n=Number(v);return `<td class="score ${n>0?'positive':n<0?'negative':'neutral'}">${Number.isFinite(n)?n.toFixed(2):'—'}</td>`}if(k==='data_completeness'&&v!==null&&v!==undefined&&!Number.isNaN(Number(v)))v=`${(Number(v)*100).toFixed(0)}%`;return `<td class="${k==='reasoning_summary'?'reason':''}">${escapeHtml(v??'—')}</td>`}).join('')}<td><a href="/api/chart/${encodeURIComponent(r.symbol||'')}" target="_blank" rel="noreferrer" title="Open Trader chart for ${escapeHtml(r.symbol||'')}" style="font-size:19px;text-decoration:none;cursor:pointer">📊</a></td></tr>`).join('')}</tbody></table></div>`;updateTraceSymbols()}
