@@ -1,21 +1,24 @@
 """Technical chart rendering for the Trader lens.
 
-`plot_trade_chart(daily, zones, plan, path, title, lookback, ax, ax_vol)`
-    Single chart — standalone (path set, creates own figure with volume) or composited (ax/ax_vol supplied).
+`plot_trade_chart` / `plot_dual_chart` — price + EMAs + demand/supply zones + VWAP + volume sub-panel
++ event markers (past = vertical lines, upcoming = annotation box).
 
-`plot_dual_chart(daily, zones, long_plan, short_plan, path, symbol, capital, risk_pct, lookback)`
-    Side-by-side dual chart: LEFT = LONG setup, RIGHT = SHORT setup. Both panels share the same zone
-    layout; plan lines differ. Volume sub-panel below each price panel. MTF alignment badge stamped on each.
+The dual chart deliberately makes the two panels VISUALLY DISTINCT:
+  LEFT  (LONG)  — demand zones bright green, supply zones faded
+  RIGHT (SHORT) — supply zones bright red,  demand zones faded
+plus a profit-zone fill and directional arrow so a trader can read it at a glance.
 """
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt         # noqa: E402
-import matplotlib.gridspec as gridspec  # noqa: E402
-import pandas as pd                     # noqa: E402
+import matplotlib.pyplot as plt          # noqa: E402
+import matplotlib.gridspec as gridspec   # noqa: E402
+import matplotlib.patches as mpatches   # noqa: E402
+import pandas as pd                      # noqa: E402
 
 _BG, _GRID, _PRICE = "#ffffff", "#e6e6e6", "#111111"
 _EMA = {"ema20": "#e8820c", "ema50": "#1f77b4", "ema200": "#7a3fb0"}
@@ -27,18 +30,16 @@ _EVENT_COLORS = {"results": "#6A0DAD", "dividend": "#1a9850", "board_meeting": "
                  "fundraise": "#1f77b4", "analyst_meet": "#555", "merger_acquisition": "#d6301d"}
 
 
-# ──────────────────────────────────────────────────── internal drawing helpers ────
+# ──────────────────────────────────────────────────── drawing helpers ────
 
 def _draw_events(ax: plt.Axes, daily: pd.DataFrame, lookback: int,
                  events: list[dict[str, Any]] | None) -> None:
-    """Mark past events as vertical dashed lines; collect upcoming events for an annotation box."""
     if not events:
         return
     d = daily.sort_values("time").tail(lookback).reset_index(drop=True)
     if d.empty:
         return
-    chart_start = d["time"].iloc[0]
-    chart_end = d["time"].iloc[-1]
+    chart_start, chart_end = d["time"].iloc[0], d["time"].iloc[-1]
     upcoming_lines: list[str] = []
     for ev in events:
         edate_str = ev.get("date") or ""
@@ -50,7 +51,7 @@ def _draw_events(ax: plt.Axes, daily: pd.DataFrame, lookback: int,
             continue
         etype = ev.get("type", "other")
         col = _EVENT_COLORS.get(etype, "#555")
-        label = f"{etype.replace('_',' ').title()} {edate.strftime('%d%b')}"
+        label = f"{etype.replace('_', ' ').title()} {edate.strftime('%d%b')}"
         if chart_start <= edate <= chart_end:
             ax.axvline(edate, color=col, linestyle=":", linewidth=1.1, alpha=0.85, zorder=4)
             ax.text(edate, ax.get_ylim()[1] if ax.get_ylim()[1] != 1.0 else 1,
@@ -63,11 +64,17 @@ def _draw_events(ax: plt.Axes, daily: pd.DataFrame, lookback: int,
                 color="#334155", bbox=dict(facecolor="white", alpha=0.82, edgecolor=_GRID, boxstyle="round,pad=0.3"))
 
 
-def _draw_base(ax: plt.Axes, daily: pd.DataFrame, zones: dict[str, Any], lookback: int) -> None:
-    """Draw price, EMAs, demand/supply zone bands, VWAP — everything except plan-specific lines."""
+def _draw_base(ax: plt.Axes, daily: pd.DataFrame, zones: dict[str, Any], lookback: int,
+               side: str = "both") -> None:
+    """Price + EMAs + zone bands + VWAP.
+    `side` makes the two dual-chart panels look visually different:
+      'long'  → demand zones bright/opaque, supply zones faded
+      'short' → supply zones bright/opaque, demand zones faded
+      'both'  → equal (single-chart default)"""
     d = daily.sort_values("time").tail(lookback).reset_index(drop=True)
     x = pd.to_datetime(d["time"])
-    ax.set_facecolor(_BG)
+    bg_tint = "#f0fff4" if side == "long" else "#fff5f5" if side == "short" else _BG
+    ax.set_facecolor(bg_tint)
     ax.grid(True, color=_GRID, linewidth=0.5, zorder=0)
     ax.vlines(x, d["low"], d["high"], color="#adb5bd", linewidth=0.5, zorder=1)
     ax.plot(x, d["close"], color=_PRICE, linewidth=1.5, label="Close", zorder=3)
@@ -76,26 +83,35 @@ def _draw_base(ax: plt.Axes, daily: pd.DataFrame, zones: dict[str, Any], lookbac
         if len(d) >= span:
             ax.plot(x, d["close"].ewm(span=span, adjust=False).mean(),
                     color=col, linewidth=0.9, alpha=0.9, label=key.upper(), zorder=2)
+
     xmax = x.iloc[-1]
     nd, ns = zones.get("nearest_demand"), zones.get("nearest_supply")
+
+    # Zone opacity: the "active" side is prominent; the other is nearly invisible
+    d_near  = 0.50 if side in ("long", "both") else 0.06
+    d_other = 0.28 if side in ("long", "both") else 0.03
+    s_near  = 0.50 if side in ("short", "both") else 0.06
+    s_other = 0.28 if side in ("short", "both") else 0.03
+    d_txt_alpha = 1.0 if side in ("long", "both") else 0.35
+    s_txt_alpha = 1.0 if side in ("short", "both") else 0.35
+
     for z in (zones.get("demand_zones") or []):
         near = nd and abs(z["mid"] - nd["mid"]) < 0.01
-        ax.axhspan(z["low"], z["high"], color=_DEMAND, alpha=0.32 if near else 0.11, zorder=0)
+        ax.axhspan(z["low"], z["high"], color=_DEMAND, alpha=d_near if near else d_other, zorder=0)
     if nd:
         ax.text(xmax, nd["high"], f"  D {nd['low']}–{nd['high']} s{nd.get('strength','?')}",
-                color=_DEMAND, fontsize=7, va="bottom", ha="left", clip_on=True)
+                color=_DEMAND, fontsize=7, va="bottom", ha="left", clip_on=True, alpha=d_txt_alpha)
     for z in (zones.get("supply_zones") or []):
         near = ns and abs(z["mid"] - ns["mid"]) < 0.01
-        ax.axhspan(z["low"], z["high"], color=_SUPPLY, alpha=0.32 if near else 0.11, zorder=0)
+        ax.axhspan(z["low"], z["high"], color=_SUPPLY, alpha=s_near if near else s_other, zorder=0)
     if ns:
         ax.text(xmax, ns["low"], f"  S {ns['low']}–{ns['high']} s{ns.get('strength','?')}",
-                color=_SUPPLY, fontsize=7, va="top", ha="left", clip_on=True)
+                color=_SUPPLY, fontsize=7, va="top", ha="left", clip_on=True, alpha=s_txt_alpha)
     if zones.get("vwap_session") is not None:
         ax.axhline(zones["vwap_session"], color=_VWAP, linestyle=":", linewidth=1.0, label="VWAP", zorder=2)
 
 
 def _draw_volume(ax_vol: plt.Axes, daily: pd.DataFrame, lookback: int) -> None:
-    """Volume bars (green=up day, red=down day) + 20-bar rolling average."""
     d = daily.sort_values("time").tail(lookback).reset_index(drop=True)
     x = pd.to_datetime(d["time"])
     colors = [_VOL_UP if c >= o else _VOL_DN for c, o in zip(d["close"], d["open"])]
@@ -118,18 +134,36 @@ def _draw_plan(ax: plt.Axes, daily: pd.DataFrame, plan: dict[str, Any], lookback
                 bbox=dict(facecolor="white", alpha=0.8, boxstyle="round"))
         return
     e_col, s_col, t_col = (_LONG_E, _LONG_S, _LONG_T) if bias == "long" else (_SHORT_E, _SHORT_S, _SHORT_T)
+    fill_col = _DEMAND if bias == "long" else _SUPPLY
     d = daily.sort_values("time").tail(lookback)
     xmin = pd.to_datetime(d["time"].iloc[0])
-    for lvl, col, name, ls in [(plan.get("entry"), e_col, "entry", "-"),
-                                (plan.get("stop_loss"), s_col, "SL", "--"),
-                                (plan.get("target"), t_col, "target", "--")]:
-        if lvl is not None:
-            ax.axhline(lvl, color=col, linestyle=ls, linewidth=1.4 if name == "entry" else 1.0, zorder=5)
-            ax.text(xmin, lvl, f" {name} {lvl}", color=col, fontsize=8, va="center",
-                    ha="left", weight="bold" if name == "entry" else "normal")
+    xmax = pd.to_datetime(d["time"].iloc[-1])
+    entry, stop, target = plan.get("entry"), plan.get("stop_loss"), plan.get("target")
     rr, qty = plan.get("risk_reward"), plan.get("quantity")
-    ax.set_xlabel(f"{bias.upper()}  entry {plan.get('entry')}  SL {plan.get('stop_loss')}  "
-                  f"target {plan.get('target')}  R:R {rr}  qty {qty}", fontsize=7.5, labelpad=4, color="#334155")
+
+    # ── profit-zone fill between entry and target (shows P&L corridor visually)
+    if entry is not None and target is not None:
+        lo, hi = (entry, target) if bias == "long" else (target, entry)
+        ax.axhspan(lo, hi, color=fill_col, alpha=0.10, zorder=0)
+
+    # ── plan lines: thick entry, dashed SL/target
+    for lvl, col, name, lw, ls in [(entry, e_col, "entry", 2.2, "-"),
+                                    (stop, s_col, "SL", 1.3, "--"),
+                                    (target, t_col, "target", 1.3, "--")]:
+        if lvl is not None:
+            ax.axhline(lvl, color=col, linestyle=ls, linewidth=lw, zorder=5)
+            ax.text(xmin, lvl, f" {name} {lvl}", color=col, fontsize=9,
+                    va="center", ha="left", weight="bold" if name == "entry" else "normal",
+                    bbox=dict(facecolor="white", alpha=0.7, pad=1, linewidth=0))
+
+    # ── directional arrow at the right edge
+    if entry is not None and target is not None:
+        arrow_x = xmax
+        ax.annotate("", xy=(arrow_x, target), xytext=(arrow_x, entry),
+                    arrowprops=dict(arrowstyle="->", color=e_col, lw=2.0), zorder=6)
+
+    ax.set_xlabel(f"{bias.upper()}  entry {entry}  SL {stop}  target {target}  R:R {rr}  qty {qty}",
+                  fontsize=8, labelpad=4, color=e_col, weight="bold")
 
 
 def _mtf_badge(ax: plt.Axes, zones: dict[str, Any]) -> None:
@@ -138,10 +172,7 @@ def _mtf_badge(ax: plt.Axes, zones: dict[str, Any]) -> None:
     bias_map = mtf.get("bias") or {}
     vc = zones.get("volume_context") or {}
     vol_line = f"  Vol: {vc.get('trend','?')} ({vc.get('ratio','?')}×)" if vc else ""
-    lines = [f"MTF: {align}"]
-    for tf, label in [("1d", "D"), ("1h", "1h"), ("15m", "15m")]:
-        if tf in bias_map:
-            lines.append(f"  {label}: {bias_map[tf]}")
+    lines = [f"MTF: {align}"] + [f"  {tf}: {bias_map[tf]}" for tf in ("1d", "1h", "15m") if tf in bias_map]
     if vol_line:
         lines.append(vol_line)
     ax.text(0.985, 0.985, "\n".join(lines), transform=ax.transAxes, fontsize=7.5,
@@ -155,8 +186,8 @@ def plot_trade_chart(daily: pd.DataFrame, zones: dict[str, Any], trade_plan: dic
                      path: str | None, title: str | None = None, lookback: int = 160,
                      ax: plt.Axes | None = None, ax_vol: plt.Axes | None = None,
                      events: list[dict[str, Any]] | None = None) -> str | None:
-    """Single chart. With no ax/ax_vol, creates its own figure (price + volume), saves to `path` and returns it.
-    When ax is supplied, draws on that axis only (used by plot_dual_chart; no save)."""
+    """Single chart. With no ax/ax_vol, creates its own figure (price + volume sub-panel), saves and returns path.
+    When ax is supplied, draws on that axis (used by plot_dual_chart; no save)."""
     standalone = ax is None
     if standalone:
         fig = plt.figure(figsize=(14, 8), dpi=110)
@@ -164,7 +195,10 @@ def plot_trade_chart(daily: pd.DataFrame, zones: dict[str, Any], trade_plan: dic
         gs_ = gridspec.GridSpec(2, 1, figure=fig, height_ratios=[4, 1], hspace=0.04)
         ax = fig.add_subplot(gs_[0])
         ax_vol = fig.add_subplot(gs_[1], sharex=ax)
-    _draw_base(ax, daily, zones, lookback)
+    side = (trade_plan or {}).get("bias", "both")
+    if side not in ("long", "short"):
+        side = "both"
+    _draw_base(ax, daily, zones, lookback, side=side)
     _draw_plan(ax, daily, trade_plan or {}, lookback)
     _draw_events(ax, daily, lookback, events)
     _mtf_badge(ax, zones)
@@ -176,10 +210,11 @@ def plot_trade_chart(daily: pd.DataFrame, zones: dict[str, Any], trade_plan: dic
     if ax_vol is not None:
         _draw_volume(ax_vol, daily, lookback)
     if standalone:
-        if fig:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             fig.tight_layout()
-            fig.savefig(path, facecolor=_BG)
-            plt.close(fig)
+        fig.savefig(path, facecolor=_BG)
+        plt.close(fig)
     return path
 
 
@@ -187,7 +222,9 @@ def plot_dual_chart(daily: pd.DataFrame, zones: dict[str, Any],
                     long_plan: dict[str, Any], short_plan: dict[str, Any],
                     path: str, symbol: str = "", lookback: int = 160,
                     events: list[dict[str, Any]] | None = None) -> str:
-    """Side-by-side dual chart: LEFT = LONG, RIGHT = SHORT. Each panel has a volume sub-panel below."""
+    """Side-by-side dual chart: LEFT = LONG (green-biased), RIGHT = SHORT (red-biased).
+    The zone highlighting, background tint, profit fill and directional arrow make the two panels
+    immediately distinguishable even at a quick glance."""
     fig = plt.figure(figsize=(24, 10), dpi=110)
     fig.patch.set_facecolor(_BG)
     gs_ = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[4, 1], hspace=0.04, wspace=0.22)
@@ -200,23 +237,28 @@ def plot_dual_chart(daily: pd.DataFrame, zones: dict[str, Any],
     vwap_s = zones.get("vwap_side") or "—"
     vc = zones.get("volume_context") or {}
     vol_txt = f"  Vol {vc.get('trend','?')} {vc.get('ratio','?')}×" if vc else ""
-    for ax, axv, plan, side, accent in [
-        (ax_l, axv_l, long_plan,  f"LONG  — {symbol}  EMA: {stack}  VWAP: {vwap_s}{vol_txt}",  _DEMAND),
-        (ax_r, axv_r, short_plan, f"SHORT — {symbol}  EMA: {stack}  VWAP: {vwap_s}{vol_txt}", _SUPPLY),
+
+    for ax, axv, plan, side, title_txt, accent in [
+        (ax_l, axv_l, long_plan,  "long",
+         f"LONG  —  {symbol}  |  EMA: {stack}  VWAP: {vwap_s}{vol_txt}", _DEMAND),
+        (ax_r, axv_r, short_plan, "short",
+         f"SHORT —  {symbol}  |  EMA: {stack}  VWAP: {vwap_s}{vol_txt}", _SUPPLY),
     ]:
-        _draw_base(ax, daily, zones, lookback)
+        _draw_base(ax, daily, zones, lookback, side=side)
         _draw_plan(ax, daily, plan, lookback)
         _draw_events(ax, daily, lookback, events)
         _mtf_badge(ax, zones)
-        ax.set_title(side, fontsize=11, color=accent, weight="bold", pad=7)
+        ax.set_title(title_txt, fontsize=11.5, color=accent, weight="bold", pad=7)
         ax.legend(loc="upper left", fontsize=7.5, framealpha=0.9)
         ax.set_ylabel("price (INR)", fontsize=9)
         plt.setp(ax.get_xticklabels(), visible=False)
         _draw_volume(axv, daily, lookback)
 
-    import warnings
-    fig.suptitle(f"Trader analysis — {symbol}   green = demand/support   red = supply/resistance   "
-                 f"volume bars show conviction", fontsize=9.5, color="#334155", y=1.005)
+    fig.suptitle(
+        f"Trader analysis — {symbol}   "
+        f"LEFT: green zones = demand (long setup)   RIGHT: red zones = supply (short setup)   "
+        f"volume bars show conviction",
+        fontsize=9.5, color="#334155", y=1.005)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         fig.tight_layout(pad=1.5)
