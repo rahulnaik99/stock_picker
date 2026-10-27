@@ -89,9 +89,21 @@ class RunRequest(BaseModel):
         return normalized
 
 
+class BenchmarkModel(BaseModel):
+    provider: str
+    model: str
+
+class BenchmarkRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=20)
+    models: list[BenchmarkModel] = Field(min_length=1, max_length=10)
+    timeout: int = Field(default=300, ge=30, le=1800)
+    as_of: str | None = None
+
+
 # Runtime task state is kept in memory for polling. Completed runs and agent traces are persisted in SQLite.
 _run_tasks: dict[str, dict[str, Any]] = {}
 _run_results: dict[str, list[dict[str, Any]]] = {}
+_benchmarks: dict[str, dict[str, Any]] = {}
 _active_run_id: str | None = None
 _active_lock = asyncio.Lock()
 
@@ -396,6 +408,111 @@ async def list_available_models() -> dict[str, Any]:
 
     total = sum(len(v) for v in catalog.values() if isinstance(v, list))
     return {"catalog": catalog, "default": default_info, "total_models": total}
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  BENCHMARK — run one stock through multiple models sequentially, compare
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _run_benchmark(bench_id: str, req: BenchmarkRequest) -> None:
+    import time as _time
+    state = _benchmarks[bench_id]
+    sym   = req.symbol.upper().strip()
+    rows  = [{"symbol": sym, "company_name": sym, "sub_sector": ""}]
+    s     = get_settings()
+    saved = (s.llm_force_provider, s.llm_force_model, s.llm_timeout_seconds)
+    try:
+        from app.export.writer import export as _export
+        from app.graph.runner import run_universe
+    except Exception as exc:  # noqa: BLE001
+        state["status"] = "failed"; state["error"] = str(exc); return
+    for i, m in enumerate(state["models"]):
+        m["status"] = "running"
+        m["started_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        t0 = _time.monotonic()
+        run_id = f"{bench_id}_m{i}"
+        try:
+            s.llm_force_provider  = m["provider"]
+            s.llm_force_model     = m["model"]
+            s.llm_timeout_seconds = req.timeout
+            _run_tasks[run_id] = {"status": "queued", "scope": f"benchmark:{bench_id}",
+                                   "symbols": [sym], "created_at": m["started_at"]}
+            _, ranked = await run_universe(
+                rows, as_of=req.as_of, run_id=run_id, mode="inprocess", concurrency=1, refresh=False)
+            r = ranked[0] if ranked else None
+            elapsed = round(_time.monotonic() - t0)
+            m.update({
+                "status": "done", "run_id": run_id, "elapsed_seconds": elapsed,
+                "final_score":       round(r.final_score, 3)    if r and r.final_score is not None else None,
+                "direction":         r.direction_view            if r else None,
+                "trade_status":      r.trade_status              if r else None,
+                "data_completeness": round(r.data_completeness, 3) if r and r.data_completeness else None,
+                "agent_scores":      {k: round(v.score, 2) for k, v in (r.agent_results or {}).items()
+                                      if v and v.score is not None} if r else {},
+                "risk_flags":        (r.risk_flags or [])[:6]   if r else [],
+                "reasoning_summary": ((r.reasoning_summary or "")[:600]) if r else "",
+                "token_usage":       (r.token_usage or {})       if r else {},
+                "error":             None,
+            })
+            try: progress.finish_run(run_id, "completed")
+            except Exception: pass  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            m.update({"status": "error", "error": str(exc)[:300],
+                      "elapsed_seconds": round(_time.monotonic() - t0)})
+        finally:
+            s.llm_force_provider, s.llm_force_model, s.llm_timeout_seconds = saved
+        state["completed"] = i + 1
+    state["status"]      = "completed"
+    state["finished_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+@app.post("/api/benchmark", tags=["benchmark"], status_code=202)
+async def create_benchmark(req: BenchmarkRequest,
+                            background_tasks: BackgroundTasks) -> dict[str, Any]:
+    """Start a multi-model benchmark on one stock. Models run sequentially to avoid RAM pressure."""
+    bench_id = f"bench_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    state: dict[str, Any] = {
+        "benchmark_id": bench_id, "symbol": req.symbol.upper().strip(),
+        "as_of": req.as_of, "status": "running",
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "finished_at": None, "completed": 0, "total": len(req.models),
+        "models": [{"provider": m.provider, "model": m.model,
+                    "status": "queued", "run_id": None} for m in req.models],
+    }
+    _benchmarks[bench_id] = state
+    background_tasks.add_task(_run_benchmark, bench_id, req)
+    return {"benchmark_id": bench_id, "status": "running", "total": len(req.models)}
+
+
+@app.get("/api/benchmark/{bench_id}", tags=["benchmark"])
+async def get_benchmark(bench_id: str) -> dict[str, Any]:
+    if bench_id not in _benchmarks:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+    return _benchmarks[bench_id]
+
+
+@app.get("/api/benchmark/{bench_id}/report", tags=["benchmark"])
+async def get_benchmark_report(bench_id: str) -> dict[str, Any]:
+    """Structured comparison report — paste into EKX to get model rankings."""
+    if bench_id not in _benchmarks:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+    state = _benchmarks[bench_id]
+    done  = [m for m in state["models"] if m["status"] == "done"]
+    ranked = sorted(done, key=lambda x: x.get("final_score") or -99, reverse=True)
+    return {"benchmark_id": bench_id, "symbol": state["symbol"], "as_of": state.get("as_of"),
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "status": state["status"], "models_tested": len(state["models"]), "models_done": len(done),
+            "ranking_hint": "Paste this JSON to EKX — it ranks models by reasoning quality, consistency, specificity and speed.",
+            "results": ranked}
+
+
+@app.get("/api/benchmarks", tags=["benchmark"])
+async def list_benchmarks() -> dict[str, Any]:
+    items = sorted(_benchmarks.values(), key=lambda x: x.get("created_at", ""), reverse=True)
+    return {"benchmarks": [{"benchmark_id": b["benchmark_id"], "symbol": b["symbol"],
+                             "status": b["status"], "completed": b["completed"],
+                             "total": b["total"], "created_at": b.get("created_at")} for b in items]}
 
 
 @app.get("/api/chart/{symbol}", tags=["charts"])

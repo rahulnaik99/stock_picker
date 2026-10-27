@@ -60,6 +60,52 @@ def extract_json(text: str) -> dict[str, Any]:
     raise ValueError("unterminated JSON object")
 
 
+# Keys some models use instead of the canonical ones we expect
+_REASONING_ALIASES = ("analysis", "explanation", "rationale", "summary",
+                      "justification", "assessment", "conclusion", "recommendation", "thought")
+_SCORE_ALIASES     = ("final_score", "adjusted_score", "adjustment", "delta",
+                      "value", "score_value", "result")
+
+
+def _normalise_llm_dict(d: dict[str, Any]) -> dict[str, Any]:
+    """Map common alternative LLM response shapes into the canonical schema keys before Pydantic validates.
+
+    Handles three common failure modes from weaker models:
+    1. Wrapping everything in a single top-level key  {"analysis": {"score_adjustment": 0, ...}}
+    2. Using wrong key names  {"analysis": "...", "final_score": 2.33}
+    3. Omitting reasoning entirely  {"score_adjustment": 0, "confidence": 0.7}  -> reasoning=""
+    """
+    d = dict(d)
+
+    # 1. Unwrap a single-key envelope  {"output": {...}}  →  {...}
+    if len(d) == 1:
+        only_val = next(iter(d.values()))
+        if isinstance(only_val, dict):
+            d = dict(only_val)
+
+    # 2. Map reasoning aliases → "reasoning"
+    if not d.get("reasoning"):
+        for alias in _REASONING_ALIASES:
+            if alias in d and isinstance(d[alias], str) and d[alias].strip():
+                d["reasoning"] = d.pop(alias)
+                break
+        # Also try one level deeper (some models nest things)
+        if not d.get("reasoning"):
+            for v in d.values():
+                if isinstance(v, dict) and v.get("reasoning"):
+                    d["reasoning"] = v["reasoning"]
+                    break
+
+    # 3. Map score aliases → "score_adjustment" (baseline mode) or "score" (absolute mode)
+    if d.get("score_adjustment") is None and d.get("score") is None:
+        for alias in _SCORE_ALIASES:
+            if alias in d and isinstance(d[alias], (int, float)):
+                d["score_adjustment"] = d[alias]
+                break
+
+    return d
+
+
 # URLs are for humans (the UI/DB keep them); the LLM cannot click them and they are very long
 # (Google-News redirect links run 500+ chars each), so strip them from the model payload to save tokens.
 _LLM_NOISE_KEYS = ("url", "source_url", "link", "guid")
@@ -154,7 +200,7 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
                 ti, to = getattr(resp, "_ekx_tokens", (0, 0))
                 tok_in, tok_out = tok_in + (ti or 0), tok_out + (to or 0)
                 raw = resp.content if isinstance(resp.content, str) else json.dumps(resp.content)
-                parsed = schema(**extract_json(raw))
+                parsed = schema(**_normalise_llm_dict(extract_json(raw)))
                 break
             except (ValueError, ValidationError, json.JSONDecodeError) as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
@@ -163,11 +209,25 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
                                        ("user", "Your reply was not valid. Return ONLY the JSON object from the output spec.")]
             except Exception as exc:  # noqa: BLE001 - network/auth/etc from the provider
                 last_err = f"{type(exc).__name__}: {exc}"
-                log.error("%s LLM call failed (%s/%s): %s", agent, spec.provider, spec.model, last_err[:300])
-                if any(w in last_err.lower() for w in ("context size", "context length", "length limit", "num_ctx")):
+                err_low  = last_err.lower()
+                # Ollama-specific: GGUF sampler incompatibility — no point retrying
+                if "initialize samplers" in err_low or ("400" in last_err and "samplers" in err_low):
+                    last_err = (f"Model '{spec.model}' could not be loaded by Ollama "
+                                f"(GGUF sampler incompatibility). "
+                                f"Remove it from llm_catalog.json or try a different quantisation. "
+                                f"Original: {exc}")
+                    log.error("%s model incompatible (%s): %s", agent, spec.model, last_err[:300])
+                elif "400" in last_err and "invalid_request" in err_low:
+                    last_err = (f"Model '{spec.model}' rejected the request (HTTP 400). "
+                                f"The model may not support the prompt format. "
+                                f"Original: {exc}")
+                    log.error("%s invalid request (%s): %s", agent, spec.model, last_err[:300])
+                elif any(w in err_low for w in ("context size", "context length", "length limit", "num_ctx")):
                     log.error("%s hit the model's context limit. Raise it on the Ollama SERVER (per-call num_ctx is ignored by "
                               "Ollama's /v1 endpoint): build a Modelfile with `PARAMETER num_ctx 16384` (see app/config/ollama/) "
                               "or start Ollama with OLLAMA_CONTEXT_LENGTH=16384.", agent)
+                else:
+                    log.error("%s LLM call failed (%s/%s): %s", agent, spec.provider, spec.model, last_err[:300])
                 break
     save_trace(agent, {"provider": spec.provider, "model": spec.model, "system": system_prompt, "user": user,
                        "reply": raw, "error": last_err, "tools": tool_results})

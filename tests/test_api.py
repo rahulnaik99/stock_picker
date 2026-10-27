@@ -73,7 +73,7 @@ def test_dashboard_contains_live_agent_run_and_token_calculation():
     response = client.get("/")
     assert response.status_code == 200
     assert "Live agent run" in response.text
-    assert "Token calculation" in response.text
+    assert "Token usage" in response.text
     assert "/progress" in response.text
 
 

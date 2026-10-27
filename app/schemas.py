@@ -16,7 +16,7 @@ class LLMScoreOutput(BaseModel):
     """What a specialist LLM must return (validated; anything else is rejected and retried once)."""
     score: float
     confidence: float = Field(0.5, ge=0, le=1)
-    reasoning: str
+    reasoning: str = ""          # default "" — normaliser fills this from aliases before validation
     evidence: list[Any] = Field(default_factory=list)
     missing_data: list[str] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -34,7 +34,7 @@ class LLMAdjustOutput(BaseModel):
     score_adjustment: float | None = None
     score: float | None = None
     confidence: float = Field(0.5, ge=0, le=1)
-    reasoning: str
+    reasoning: str = ""          # default "" — normaliser fills this from aliases before validation
     evidence: list[Any] = Field(default_factory=list)
     missing_data: list[str] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)
