@@ -79,17 +79,42 @@ def fake_tools() -> dict[str, Any]:
         if symbol not in FNO:
             return unavailable("fake_option_chain", "no option chain: not an F&O stock")
         return ok("fake_option_chain", {"underlying_ltp": 800, "pcr_oi": 1.1, "total_call_oi": 1e6, "total_put_oi": 1.1e6, "day_call_oi_change": 1e4,
-                                          "day_put_oi_change": 4e4, "windows": {"1w": "insufficient_history", "1m": "insufficient_history"}})
+                                          "day_put_oi_change": 4e4, "windows": {"1w": "insufficient_history", "1m": "insufficient_history"},
+                                          "levels": {"resistance": [], "support": [], "max_pain_approx": 795}})
+
+    def fake_rs(symbol: str, sub_sector: str | None = None, as_of: str | None = None) -> dict[str, Any]:
+        return ok("fake", {"signal": "outperforming", "rs_trend": "improving",
+                           "rs_vs_sector_pct": {"4w": 2.1, "13w": 3.8, "26w": 5.2},
+                           "rs_vs_nifty50_pct": {"4w": 1.5, "13w": 3.0, "26w": 4.1},
+                           "stock_returns_pct": {"4w": 3.5, "13w": 7.2, "26w": 9.8},
+                           "sector_data_ok": True, "nifty_data_ok": True,
+                           "note": "fake RS data"}, symbol=symbol)
+
+    def fake_risk(symbol: str, as_of: str | None = None) -> dict[str, Any]:
+        return ok("fake", {"beta_vs_nifty": 1.15, "correlation_nifty": 0.72,
+                           "volatility_pct": {"1y": 28.5, "3m": 25.1},
+                           "var_95_daily_pct": 2.1, "var_note": "2.1% daily loss at 95% confidence",
+                           "max_drawdown_pct": {"3m": -14.3, "6m": -22.1, "1y": -28.5},
+                           "risk_level": "medium", "position_size_factor": 0.87,
+                           "sizing_note": "Beta 1.15 → multiply standard qty by 0.87",
+                           "nifty_data_ok": True, "note": "fake risk data"}, symbol=symbol)
+
+    def fake_pledge(symbol: str) -> dict[str, Any]:
+        return ok("fake", {"latest_pledge_pct": 0.0, "trend": "stable", "risk": "low",
+                           "quarters": [], "note": "fake pledge data — GoI promoter"}, symbol=symbol)
 
     return {
         "get_candles": lambda symbol, **k: unavailable("fake", "not used"),
         "get_technical_indicators": fake_indicators,
         "get_demand_supply_zones": fake_zones,
         "get_option_chain": chain,
+        "get_relative_strength": fake_rs,
+        "get_quant_risk": fake_risk,
         "nse_company_events": fake_events,
         "nse_fii_dii": lambda as_of=None: flows,
         "nse_deals": lambda symbol, days=30, as_of=None: ok("fake", [], symbol=symbol, scope="stock_specific"),
-        "nse_shareholding": lambda symbol: unavailable("fake", "no shareholding in fixture"),
+        "nse_shareholding": lambda symbol: ok("fake", [{"date": "30-SEP-2026", "pr_and_prgrp": "62.93", "public_val": "37.07"}], symbol=symbol, scope="stock_specific"),
+        "nse_promoter_pledge": fake_pledge,
         "quarterly_fundamentals": fake_quarterly,
         "yf_fundamentals": lambda symbol: ok("fake", {"ratios": {"trailingPE": 12.1, "returnOnEquity": 0.15}, "quarterly": [], "recent_dividends": []}, point_in_time=False),
         "rbi_policy": lambda days=45, as_of=None: ok("fake_rbi", {"policy_rates": {"rbi_repo_rate_percent": None, "needs_verification": True}, "next_mpc_meetings": [], "recent_rbi_releases": []}),

@@ -11,12 +11,25 @@ from app.Agents.Technical.Indicator import agent as indicator
 from app.Agents.Technical.OptionChain import agent as option_chain
 from app.Agents.Technical.Trader import agent as trader
 from app.Agents.Technical.TrendFlow import agent as trend_flow
+from app.Agents.Technical.RSAgent import agent as rs_agent
+from app.Agents.Technical.QuantRisk import agent as quant_risk
+from app.Agents.Technical.PromoterIntel import agent as promoter_intel
+from app.Agents.Technical.CatalystQuality import agent as catalyst_quality
 from app.mcp_server.client import ToolClient
 from app.schemas import AgentResult
 from app.service import progress
 from app.service.logger import log_context
 
-SPECIALISTS = {"indicator": indicator, "trader": trader, "investment_trend": trend_flow, "option_chain": option_chain}
+SPECIALISTS = {
+    "indicator":        indicator,
+    "trader":           trader,
+    "rs_agent":         rs_agent,
+    "quant_risk":       quant_risk,
+    "promoter_intel":   promoter_intel,
+    "catalyst_quality": catalyst_quality,
+    "investment_trend": trend_flow,
+    "option_chain":     option_chain,
+}
 
 
 async def run(symbol: str, meta: dict[str, Any], client: ToolClient, as_of: str | None, technical_weights: dict[str, float]) -> dict[str, AgentResult]:

@@ -25,7 +25,9 @@ from app.mcp_server.tools.common import now_iso
 from app.service.logger import run_id_var, symbol_var, agent_var
 
 # Agents tracked for live display, in pipeline order. "decision_maker" runs only when the data gate passes.
-AGENT_ORDER: list[str] = ["fundamental", "industry", "indicator", "trader", "investment_trend", "option_chain", "decision_maker"]
+AGENT_ORDER: list[str] = ["fundamental", "industry", "indicator", "trader",
+                          "rs_agent", "quant_risk", "promoter_intel", "catalyst_quality",
+                          "investment_trend", "option_chain", "decision_maker"]
 MAX_RUNS = 50
 
 _lock = threading.RLock()

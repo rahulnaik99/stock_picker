@@ -137,7 +137,7 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     if freshness:
         evidence["data_freshness"] = {"warning": freshness}
     metrics_block = (qres.get("data") or {}).get("metrics") if qres["status"] == "ok" else None
-    base_score, _parts = baselines.fundamental_baseline(metrics_block, meta.get("sub_sector"))
+    base_score, baseline_parts = baselines.fundamental_baseline(metrics_block, meta.get("sub_sector"))
     # Long-term / short-term divergence: turnaround or slowdown nudges the baseline even before the LLM speaks.
     horizon_delta = baselines.horizon_baseline_delta(evidence.get("fundamental_view"))
     base_score = max(-10.0, min(10.0, base_score + horizon_delta))
@@ -156,4 +156,5 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
             res.missing_data.append(f"only {qres['data']['metrics']['quarters_available']} of 16 quarters of results available")
         res.extra["results_metrics"] = (qres.get("data") or {}).get("metrics", {}).get("metrics")
         res.extra["fundamental_view"] = evidence.get("fundamental_view")
+        res.extra["baseline_parts"] = {**baseline_parts, "horizon_delta": horizon_delta}  # debug: why did baseline land here?
     return res

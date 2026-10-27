@@ -94,8 +94,8 @@ def _first(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
 
 
 def parse_nse_results(rows: list[dict[str, Any]], symbol: str) -> list[dict[str, Any]]:
-    """NSE financial-results rows -> fundamentals_q rows (INR crore). Pure function (unit-tested with a fixture).
-    NOTE: field names follow NSE's public JSON as last documented; verify on the first live run."""
+    """DEPRECATED — superseded by the XBRL-based `_fetch_nse_results` pipeline (uses nse_filings + XBRL).
+    Kept only because existing unit tests exercise it; do not call from production code."""
     out = []
     for r in rows:
         end = parse_any_dt(_first(r, _NSE_KEYS["period_end"]))

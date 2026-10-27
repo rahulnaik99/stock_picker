@@ -43,7 +43,9 @@ async def _compute(tools: AgentTools, as_of: str | None) -> AgentResult:
         "policy_calendar": await tools.call("policy_calendar", days_ahead=45, as_of=as_of),
         "macro_snapshot": await tools.call("macro_snapshot", as_of=as_of),
     }
-    news = [await tools.call("news_search", query=q, days=14, as_of=as_of) for q in CFG["news_queries"]]
+    # Run the three sector news searches concurrently (they were sequential before — ~3× speedup here).
+    news = await asyncio.gather(*[tools.call("news_search", query=q, days=14, as_of=as_of)
+                                  for q in CFG["news_queries"]])
     results["sector_news"] = {"status": "ok" if any(n["status"] == "ok" for n in news) else news[0]["status"],
                               "source": "google_news_rss", "retrieved_at": news[0].get("retrieved_at"),
                               "data": [i for n in news if n["status"] == "ok" for i in n["data"]][:24],
@@ -53,7 +55,7 @@ async def _compute(tools: AgentTools, as_of: str | None) -> AgentResult:
     evidence = {k: compact(v, 12) for k, v in results.items()}
     evidence["tool_status"] = {k: v["status"] for k, v in results.items()}
     macro = results["macro_snapshot"]["data"] if results["macro_snapshot"]["status"] == "ok" else []
-    base_score, _parts = baselines.industry_baseline(macro)
+    base_score, baseline_parts = baselines.industry_baseline(macro)
     return await analyze(agent=NAME, llm_key=NAME, symbol=SCOPE, system_prompt=load_prompt(__file__, sector_focus=CFG["focus"]),
                          evidence=evidence, tool_results=results, context={"scope": SCOPE, "as_of": as_of}, baseline=base_score)
 

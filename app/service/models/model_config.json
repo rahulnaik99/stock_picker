@@ -19,6 +19,22 @@
     "provider": "ollama",
     "model": "nemotron-e4b-16k"
   },
+  "rs_agent": {
+    "provider": "ollama",
+    "model": "nemotron-e4b-16k"
+  },
+  "quant_risk": {
+    "provider": "ollama",
+    "model": "nemotron-e4b-16k"
+  },
+  "promoter_intel": {
+    "provider": "ollama",
+    "model": "nemotron-e4b-16k"
+  },
+  "catalyst_quality": {
+    "provider": "ollama",
+    "model": "nemotron-e4b-16k"
+  },
   "trend_flow": {
     "provider": "ollama",
     "model": "nemotron-e4b-16k"

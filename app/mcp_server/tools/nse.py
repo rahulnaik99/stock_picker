@@ -192,7 +192,9 @@ def nse_company_events(symbol: str, days: int = 90, as_of: str | None = None) ->
                               status="upcoming" if day > t else "done", retrieved=retrieved)
 
     live = t.date() >= now_ist().date()
-    gate_key = sym if live else f"{sym}@{t.date()}"
+    # Include `days` in the gate key so a 90-day fetch doesn't block a later 120-day fetch from the same run.
+    # Both agents calling with the same window reuse the cache; different windows re-fetch once.
+    gate_key = f"{sym}:{days}" if live else f"{sym}@{t.date()}:{days}"
     cache, new = "hit", 0
     if not refreshed_today("events", gate_key):
         cache = "refreshed"
@@ -240,12 +242,21 @@ def nse_fii_dii(as_of: str | None = None) -> dict[str, Any]:
 
 
 def nse_deals(symbol: str, days: int = 30, as_of: str | None = None) -> dict[str, Any]:
-    """STOCK-SPECIFIC bulk and block deals (large buyer/seller names, quantities)."""
+    """STOCK-SPECIFIC bulk and block deals (large buyer/seller names, quantities).
+    Cached daily so the two agents that call this (TrendFlow + Trader) share one NSE hit per stock."""
     import time
+    from app.store.db import kv_get, kv_set
     src = "nse_deals"
     sym = clean_symbol(symbol)
     t = parse_as_of(as_of)
     start, end = window(t, days)
+    gate_key = f"{sym}:{days}"
+    # Return cached result for today if already fetched (avoids double NSE hit from concurrent agents)
+    if refreshed_today("deals", gate_key):
+        cached = kv_get("deals", gate_key)
+        if cached is not None:
+            return ok(src, cached, symbol=sym, scope="stock_specific", cache="hit",
+                      note="Empty list = no reported deals in window.")
     out: list[dict[str, Any]] = []
     errs: list[str] = []
     for kind in ("bulk-deals", "block-deals"):
@@ -277,6 +288,9 @@ def nse_deals(symbol: str, days: int = 30, as_of: str | None = None) -> dict[str
                   note="NSE bulk/block-deals endpoint temporarily unavailable (HTTP 503). Empty list returned.")
     if not out and errs:
         return error(src, " | ".join(errs))
+    # Cache the result so the second caller (Trader or TrendFlow) skips the NSE round-trip today.
+    kv_set("deals", gate_key, out)
+    mark_refreshed("deals", gate_key)
     return ok(src, out, symbol=sym, scope="stock_specific", feed_errors=errs,
               note="Empty list = no reported deals in window.")
 
@@ -291,5 +305,41 @@ def nse_shareholding(symbol: str) -> dict[str, Any]:
             return unavailable(src, f"no shareholding rows for {sym}")
         keep = ("date", "pr_and_prgrp", "public_val", "employeeTrusts", "recordDate", "name")
         return ok(src, [{k: r.get(k) for k in keep if k in r} for r in rows[:6]], symbol=sym, scope="stock_specific")
+    except Exception as exc:  # noqa: BLE001
+        return error(src, exc)
+
+
+def nse_promoter_pledge(symbol: str) -> dict[str, Any]:
+    """STOCK-SPECIFIC promoter pledging data from NSE filings.
+    Returns quarterly pledge %, trend (rising/falling/stable) and the latest raw rows.
+    Pledge > 30% = caution; pledge > 50% = high risk; falling pledge = positive signal."""
+    src = "nse_promoter_pledge"
+    sym = clean_symbol(symbol)
+    ref = f"{BASE}/get-quote/equity/{sym}"
+    try:
+        rows = _rows(nse_get("/api/corporatePledgeData",
+                             {"index": "equities", "symbol": sym, "type": "quarterly"}, referer=ref))
+        if not rows:
+            return unavailable(src, f"no pledging data for {sym} (may not be an F&O stock or pledging not disclosed)")
+        keep = ("pledgeDate", "quarter", "promotersPledgedShares", "percentOfTotalShares",
+                "percentOfPromotersHoldings", "totPromoterShares")
+        cleaned = [{k: r.get(k) for k in keep if k in r} for r in rows[:8]]
+        # Trend: compare latest quarter pledge % to oldest available
+        pcts = []
+        for r in cleaned:
+            v = r.get("percentOfPromotersHoldings") or r.get("percentOfTotalShares")
+            try:
+                pcts.append(float(str(v).replace("%", "").strip()))
+            except (TypeError, ValueError):
+                pass
+        latest_pledge = pcts[0] if pcts else None
+        trend = ("rising" if len(pcts) >= 2 and pcts[0] > pcts[-1] + 2 else
+                 "falling" if len(pcts) >= 2 and pcts[0] < pcts[-1] - 2 else "stable")
+        risk = ("high" if latest_pledge and latest_pledge > 50 else
+                "caution" if latest_pledge and latest_pledge > 25 else "low")
+        return ok(src, {"latest_pledge_pct": latest_pledge, "trend": trend, "risk": risk,
+                        "quarters": cleaned,
+                        "note": "pledge_pct is % of PROMOTER holdings pledged. >30%=caution; >50%=high risk."},
+                  symbol=sym, scope="stock_specific")
     except Exception as exc:  # noqa: BLE001
         return error(src, exc)

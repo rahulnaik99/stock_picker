@@ -5,8 +5,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-AgentName = Literal["fundamental", "industry", "indicator", "trader", "investment_trend", "option_chain"]
-AGENT_NAMES: list[str] = ["fundamental", "industry", "indicator", "trader", "investment_trend", "option_chain"]
+AgentName = Literal["fundamental", "industry", "indicator", "trader", "rs_agent", "quant_risk",
+                    "promoter_intel", "catalyst_quality", "investment_trend", "option_chain"]
+AGENT_NAMES: list[str] = ["fundamental", "industry", "indicator", "trader", "rs_agent", "quant_risk",
+                          "promoter_intel", "catalyst_quality", "investment_trend", "option_chain"]
 Status = Literal["ok", "unavailable", "error"]
 
 

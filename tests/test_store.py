@@ -441,7 +441,9 @@ def test_run_is_saved_with_every_agent_io(monkeypatch):
     assert run_store.list_runs()[0]["run_id"] == run_id and run_store.list_runs()[0]["scope"].startswith("specific")
     rows = run_store.load_run(run_id, "SBIN")
     agents = {r["agent"]: r for r in rows}
-    assert set(agents) == {"fundamental", "industry", "indicator", "trader", "investment_trend", "option_chain", "decision_maker", "final"}
+    assert set(agents) == {"fundamental", "industry", "indicator", "trader",
+                            "rs_agent", "quant_risk", "promoter_intel", "catalyst_quality",
+                            "investment_trend", "option_chain", "decision_maker", "final"}
     f = agents["fundamental"]
     assert f["status"] == "ok" and f["score"] is not None and f["reason"] and f["sources"] and "quarterly_results" in f["context_used"]
     assert any(s["tool"] == "quarterly_fundamentals" for s in f["sources"]) and agents["final"]["extra"]["trade_status"]

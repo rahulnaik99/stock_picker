@@ -125,11 +125,11 @@ def horizon_baseline_delta(horizon_view: dict[str, Any] | None) -> float:
 
 
 # --------------------------------------------------------------------------- trader (demand/supply, bull & bear)
-def trader_baseline(zones: dict[str, Any] | None, event_ctx: dict[str, Any] | None = None) -> tuple[float, dict[str, Any]]:
-    """Price-action lens: builds a BULL score (demand/EMA/VWAP/structure in the long's favour) and a BEAR score
-    (supply/EMA/VWAP/structure in the short's favour) from `get_demand_supply_zones`, then nets them.
-    Optional `event_ctx` adds small alignment terms from upcoming catalysts, block/bulk deals and FII/DII flow.
-    `parts` keeps `bull_score` and `bear_score` so the agent can argue both sides explicitly."""
+def trader_baseline(zones: dict[str, Any] | None, event_ctx: dict[str, Any] | None = None,
+                    option_ctx: dict[str, Any] | None = None,
+                    fundamental_ctx: dict[str, Any] | None = None) -> tuple[float, dict[str, Any]]:
+    """Price-action lens: BULL score vs BEAR score from zones + event + option + fundamental alignment.
+    Returns (net_score, parts) where parts exposes bull_score and bear_score for the LLM to argue both sides."""
     if not zones:
         return 0.0, {"reason": "no zones"}
     pa = zones.get("price_action", {}) or {}
@@ -183,29 +183,138 @@ def trader_baseline(zones: dict[str, Any] | None, event_ctx: dict[str, Any] | No
         upcoming = event_ctx.get("upcoming_catalysts") or []
         fii = event_ctx.get("fii_dii") or {}
         deal_lean = event_ctx.get("deal_lean", "neutral")
-
-        # Dividend near a demand zone = support buying ahead of ex-date (mild bull)
-        if any(e.get("type") == "dividend" for e in upcoming):
-            if pos == "at_demand":
-                bull["dividend_at_demand"] = 0.3
-
-        # FII/DII net flow (market-wide — applied conservatively as a small tilt only)
+        if any(e.get("type") == "dividend" for e in upcoming) and pos == "at_demand":
+            bull["dividend_at_demand"] = 0.3
         fii_lean = fii.get("lean", "neutral")
         if fii_lean == "net_buying":
             bull["fii_flow"] = 0.2
         elif fii_lean == "net_selling":
             bear["fii_flow"] = 0.2
-
-        # Block/bulk deal activity (stock-specific — stronger signal than market-wide FII)
         if deal_lean == "net_buy":
             bull["block_deal_buy"] = 0.3
         elif deal_lean == "net_sell":
             bear["block_deal_sell"] = 0.3
 
+    # 6) Option chain alignment: PCR tilt + OI confluence with zones (max ±0.7).
+    if option_ctx and option_ctx.get("status") != "unavailable":
+        pcr = option_ctx.get("pcr")
+        conf = option_ctx.get("confluence") or {}
+        pcr_lean = option_ctx.get("pcr_lean", "neutral")
+        if pcr_lean == "put_heavy":                  # protective buyers = demand likely holds
+            bull["option_pcr_put_heavy"] = 0.3
+        elif pcr_lean == "call_heavy":               # speculative OTM calls = bearish lean
+            bear["option_pcr_call_heavy"] = 0.3
+        if conf.get("max_pain_at_demand"):           # price gravitates toward max pain
+            bull["option_max_pain_demand"] = 0.25
+        if conf.get("max_pain_at_supply"):
+            bear["option_max_pain_supply"] = 0.25
+        if conf.get("call_wall_confirms_supply"):    # call writers defending = supply is real
+            bear["option_call_wall"] = 0.2
+        if conf.get("put_floor_confirms_demand"):    # put writers protecting = demand is real
+            bull["option_put_floor"] = 0.2
+        quad = option_ctx.get("oi_quadrant", "mixed")
+        if quad == "long_buildup":
+            bull["option_oi_quadrant"] = 0.2
+        elif quad == "short_buildup":
+            bear["option_oi_quadrant"] = 0.2
+
+    # 7) Fundamental alignment: earnings momentum + bank asset quality (max ±0.7).
+    if fundamental_ctx and fundamental_ctx.get("status") != "unavailable":
+        lean = fundamental_ctx.get("fundamental_lean", "stable")
+        if lean == "improving":
+            bull["fundamental_tailwind"] = 0.4
+        elif lean == "deteriorating":
+            bear["fundamental_headwind"] = 0.4
+        bk = fundamental_ctx.get("bank_kpis") or {}
+        gnpa = bk.get("gnpa_pct")
+        if isinstance(gnpa, (int, float)):
+            if gnpa < 2.0:
+                bull["low_gnpa"] = 0.3    # clean book = fundamental confidence
+            elif gnpa > 7.0:
+                bear["high_gnpa"] = 0.3   # stress = cap bullish upside
+
     bull_score = round(sum(bull.values()), 2)
     bear_score = round(sum(bear.values()), 2)
     net = _clamp(bull_score - bear_score)
     return net, {"bull_score": bull_score, "bear_score": bear_score, "bull_parts": bull, "bear_parts": bear}
+
+# --------------------------------------------------------------------------- relative strength
+def rs_baseline(rs_data: dict[str, Any] | None) -> tuple[float, dict[str, Any]]:
+    """Stock's RS vs sector index. Leading + improving = bull; lagging + deteriorating = bear."""
+    parts: dict[str, float] = {}
+    if not rs_data:
+        return 0.0, {"reason": "no RS data"}
+    sig = rs_data.get("signal", "inline")
+    trend = rs_data.get("rs_trend", "unknown")
+    rs13 = (rs_data.get("rs_vs_sector_pct") or {}).get("13w") or 0
+    parts["rs_signal"] = {"leading": 2.0, "outperforming": 1.0, "inline": 0.0,
+                          "underperforming": -1.0, "lagging": -2.0}.get(sig, 0.0)
+    parts["rs_trend"]  = {"improving": 0.5, "stable": 0.0, "deteriorating": -0.5}.get(trend, 0.0)
+    # Magnitude boost for extreme RS
+    if rs13 > 10:
+        parts["rs_magnitude"] = 0.5
+    elif rs13 < -10:
+        parts["rs_magnitude"] = -0.5
+    score = sum(parts.values())
+    return _clamp(score, -4, 4), parts
+
+
+# --------------------------------------------------------------------------- quant risk
+def quant_risk_baseline(risk_data: dict[str, Any] | None) -> tuple[float, dict[str, Any]]:
+    """Risk profile adjustment: high-beta/deep-drawdown stocks need smaller position multiplier.
+    Note: this baseline directly informs the position_size_factor rather than the direction score.
+    It produces a SMALL score nudge (max ±1) — risk doesn't change direction, just conviction."""
+    parts: dict[str, float] = {}
+    if not risk_data:
+        return 0.0, {"reason": "no risk data"}
+    beta = risk_data.get("beta_vs_nifty")
+    mdd1y = (risk_data.get("max_drawdown_pct") or {}).get("1y")
+    rl = risk_data.get("risk_level", "medium")
+    # High risk stocks: slight bearish nudge (harder to hold through volatility)
+    parts["risk_level"] = {"low": 0.5, "medium": 0.0, "high": -0.5}.get(rl, 0.0)
+    if isinstance(beta, (int, float)):
+        # Extreme beta = position sizing concern; doesn't change direction
+        parts["beta_extreme"] = 0.0 if 0.7 <= beta <= 1.5 else (-0.3 if beta > 1.5 else 0.2)
+    return _clamp(sum(parts.values()), -1, 1), parts
+
+
+# --------------------------------------------------------------------------- promoter intelligence
+def promoter_baseline(pledge_data: dict[str, Any] | None,
+                      shareholding: list[dict[str, Any]] | None) -> tuple[float, dict[str, Any]]:
+    """Pledge risk and promoter stake trend. Zero/falling pledge = bull tilt; high/rising = bear."""
+    parts: dict[str, float] = {}
+    if pledge_data and pledge_data.get("status") not in ("error", "unavailable"):
+        risk = pledge_data.get("risk", "low")
+        trend = pledge_data.get("trend", "stable")
+        pct = pledge_data.get("latest_pledge_pct")
+        parts["pledge_risk"] = {"low": 0.5, "caution": -0.3, "high": -1.5}.get(risk, 0.0)
+        if trend == "falling": parts["pledge_improving"] = 0.3
+        elif trend == "rising": parts["pledge_rising"] = -0.3
+    # Promoter stake trend from shareholding (rising stake = skin-in-the-game)
+    if shareholding and len(shareholding) >= 2:
+        def _pr(r):
+            try: return float(str(r.get("pr_and_prgrp") or 0).replace(",", ""))
+            except (TypeError, ValueError): return None
+        newest, oldest = _pr(shareholding[0]), _pr(shareholding[-1])
+        if newest is not None and oldest is not None:
+            d = newest - oldest
+            if d > 0.5: parts["promoter_buying"]  =  0.4
+            elif d < -0.5: parts["promoter_selling"] = -0.4
+    score = sum(parts.values())
+    return _clamp(score, -3, 3), parts
+
+
+# --------------------------------------------------------------------------- catalyst quality
+def catalyst_quality_baseline(catalyst_data: dict[str, Any] | None) -> tuple[float, dict[str, Any]]:
+    """Catalyst quality score from classified events/news.
+    Maps the composite quality label to a small baseline adjustment (max ±1.5)."""
+    if not catalyst_data:
+        return 0.0, {"reason": "no catalyst data"}
+    label = catalyst_data.get("composite_quality", "mixed")
+    score_map = {"strong_positive": 1.5, "positive": 0.8, "mildly_positive": 0.3,
+                 "mixed": 0.0, "mildly_negative": -0.3, "negative": -0.8, "strong_negative": -1.5}
+    score = score_map.get(label, 0.0)
+    return _clamp(score, -1.5, 1.5), {"quality_label": label, "score": score}
 
 
 # --------------------------------------------------------------------------- option chain

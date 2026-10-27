@@ -30,7 +30,7 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     evidence = {k: v for k, v in results.items()}
     evidence["evidence_level"] = level
     sh = results["nse_shareholding"]["data"] if results["nse_shareholding"]["status"] == "ok" else None
-    base_score, _parts = baselines.trend_baseline(results["nse_fii_dii"], sh, level)
+    base_score, baseline_parts = baselines.trend_baseline(results["nse_fii_dii"], sh, level)
     res = await analyze(agent=NAME, llm_key="trend_flow", symbol=symbol, system_prompt=load_prompt(__file__), evidence=evidence,
                         tool_results=results, context={**meta, "as_of": as_of}, baseline=base_score)
     if res.status == "ok":

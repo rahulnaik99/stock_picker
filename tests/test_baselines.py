@@ -81,3 +81,29 @@ def test_horizon_baseline_delta_signals():
          "short_term_3q": {"trend": "improving"},
          "divergence": {"signal": "sustained_growth", "lt_trend": "improving", "st_trend": "improving"}})
     assert baselines.horizon_baseline_delta(None) == 0.0
+
+
+def test_rs_baseline():
+    assert baselines.rs_baseline({"signal": "leading", "rs_trend": "improving", "rs_vs_sector_pct": {"13w": 12}})[0] > 2
+    assert baselines.rs_baseline({"signal": "lagging",  "rs_trend": "deteriorating", "rs_vs_sector_pct": {"13w": -12}})[0] < -2
+    assert baselines.rs_baseline({"signal": "inline",   "rs_trend": "stable", "rs_vs_sector_pct": {}})[0] == 0.0
+    assert baselines.rs_baseline(None)[0] == 0.0
+
+
+def test_quant_risk_baseline():
+    low  = baselines.quant_risk_baseline({"risk_level": "low",  "beta_vs_nifty": 0.6})[0]
+    high = baselines.quant_risk_baseline({"risk_level": "high", "beta_vs_nifty": 2.0})[0]
+    assert low > high and -1 <= low <= 1 and -1 <= high <= 1
+
+
+def test_promoter_baseline():
+    zero_pledge = {"risk": "low", "trend": "stable", "latest_pledge_pct": 0.0}
+    high_pledge = {"risk": "high", "trend": "rising", "latest_pledge_pct": 55.0}
+    assert baselines.promoter_baseline(zero_pledge, None)[0] > 0
+    assert baselines.promoter_baseline(high_pledge, None)[0] < 0
+
+
+def test_catalyst_quality_baseline():
+    assert baselines.catalyst_quality_baseline({"composite_quality": "strong_positive"})[0] > 1.0
+    assert baselines.catalyst_quality_baseline({"composite_quality": "strong_negative"})[0] < -1.0
+    assert baselines.catalyst_quality_baseline({"composite_quality": "mixed"})[0] == 0.0

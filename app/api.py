@@ -128,11 +128,11 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
 
         if request.stub:
             s.llm_force_provider = "stub"
+            s.llm_force_model = None
         else:
-            if request.llm_provider:
-                s.llm_force_provider = request.llm_provider
-            if request.llm_model:
-                s.llm_force_model = request.llm_model.strip()
+            # Always explicitly set (or clear) overrides so a previous run's selection never leaks.
+            s.llm_force_provider = request.llm_provider or ""
+            s.llm_force_model = (request.llm_model.strip() if request.llm_model else None)
         if request.force_refresh:
             os.environ["FORCE_REFRESH"] = "1"
             s.force_refresh = True
@@ -365,6 +365,84 @@ async def get_run_traces(run_id: str, symbol: str = Query(..., min_length=1, max
             continue
         traces.append({"agent": path.stem[len(safe_symbol) + 1:], "file": path.name, **payload})
     return {"run_id": run_id, "symbol": safe_symbol, "count": len(traces), "traces": traces}
+
+
+@app.get("/api/models", tags=["config"])
+async def list_available_models() -> dict[str, Any]:
+    """Enumerate models available across every local inference server (Ollama, MLX/OLMX, vLLM, Docker AI).
+    Also returns the current default from model_config.json. Used by the UI model selector."""
+    import httpx
+    s = get_settings()
+
+    async def _openai_models(url: str, api_key: str = "") -> list[str]:
+        """Fetch the model list from any OpenAI-compatible /v1/models endpoint."""
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{url.rstrip('/')}/models", headers=headers)
+            r.raise_for_status()
+            return [m["id"] for m in (r.json().get("data") or [])]
+
+    providers: dict[str, Any] = {}
+
+    # ── Ollama (/api/tags) ──────────────────────────────────────────────────
+    try:
+        base = (s.ollama_base_url or "http://localhost:11434").rstrip("/")
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{base}/api/tags")
+            r.raise_for_status()
+            models = [m["name"] for m in (r.json().get("models") or [])]
+        providers["ollama"] = {"available": True, "url": base, "models": sorted(models)}
+    except Exception:  # noqa: BLE001
+        providers["ollama"] = {"available": False, "url": s.ollama_base_url or "http://localhost:11434", "models": []}
+
+    # ── MLX / OLMX (OpenAI-compatible) ─────────────────────────────────────
+    olmx_url = s.olmx_base_url or ""
+    if olmx_url:
+        try:
+            models = await _openai_models(olmx_url, s.olmx_api_key or "")
+            providers["mlx"] = {"available": True, "url": olmx_url, "models": sorted(models)}
+        except Exception:  # noqa: BLE001
+            providers["mlx"] = {"available": False, "url": olmx_url, "models": []}
+    else:
+        providers["mlx"] = {"available": False, "url": "http://localhost:8008/v1", "models": []}
+
+    # ── vLLM — probe common ports (8000, 8080, 8081) ───────────────────────
+    vllm_found: dict[str, Any] = {"available": False, "url": "", "models": []}
+    for port in (8000, 8080, 8081):
+        try:
+            url = f"http://localhost:{port}/v1"
+            models = await _openai_models(url)
+            if models:
+                vllm_found = {"available": True, "url": url, "models": sorted(models)}
+                break
+        except Exception:  # noqa: BLE001
+            pass
+    providers["vllm"] = vllm_found
+
+    # ── Docker AI (docker model ls) ─────────────────────────────────────────
+    docker_models: list[str] = []
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["docker", "model", "ls", "--format", "{{.Name}}"],
+            capture_output=True, text=True, timeout=4)
+        if proc.returncode == 0:
+            docker_models = [ln.strip() for ln in proc.stdout.strip().splitlines() if ln.strip()]
+    except Exception:  # noqa: BLE001
+        pass
+    providers["docker"] = {"available": bool(docker_models), "models": docker_models}
+
+    # ── Current default from model_config.json ─────────────────────────────
+    default_info: dict[str, str] = {}
+    try:
+        from app.service.models.llm_factory import resolve_spec
+        spec = resolve_spec("default")
+        default_info = {"provider": spec.provider, "model": spec.model}
+    except Exception:  # noqa: BLE001
+        default_info = {"provider": s.llm_provider or "ollama", "model": "nemotron-e4b-16k:latest"}
+
+    total = sum(len(p.get("models") or []) for p in providers.values())
+    return {"providers": providers, "default": default_info, "total_models": total}
 
 
 @app.get("/api/chart/{symbol}", tags=["charts"])

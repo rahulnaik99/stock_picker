@@ -82,6 +82,7 @@ def test_market_wide_only_adjustment_is_bounded(monkeypatch):
     tools = ToolClient("inprocess").for_agent(trend.TOOLS)
     t = fake_tools()
     t["nse_deals"] = lambda symbol, days=30, as_of=None: unavailable("fake", "x")
+    t["nse_shareholding"] = lambda symbol: unavailable("fake", "no shareholding for this test")
     monkeypatch.setattr(registry, "TOOLS", {**registry.TOOLS, **t})
     import app.mcp_server.client as c
     monkeypatch.setattr(c, "TOOLS", registry.TOOLS)
