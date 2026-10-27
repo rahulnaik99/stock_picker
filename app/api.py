@@ -392,15 +392,20 @@ async def list_available_models() -> dict[str, Any]:
     providers: dict[str, Any] = {}
 
     # ── Ollama (/api/tags) ──────────────────────────────────────────────────
+    # Ollama's native model-list API is always at the ROOT (no /v1).
+    # Strip any trailing /v1 that may come from OLLAMA_BASE_URL in .env
+    # (that suffix is for the OpenAI-compat LLM endpoint, not the tags API).
     try:
-        base = (s.ollama_base_url or "http://localhost:11434").rstrip("/")
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{base}/api/tags")
+        raw = (s.ollama_base_url or "http://localhost:11434").rstrip("/")
+        if raw.endswith("/v1"):
+            raw = raw[:-3]      # "http://localhost:11434/v1" → "http://localhost:11434"
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            r = await client.get(f"{raw}/api/tags")
             r.raise_for_status()
-            models = [m["name"] for m in (r.json().get("models") or [])]
-        providers["ollama"] = {"available": True, "url": base, "models": sorted(models)}
+            models = sorted(m["name"] for m in (r.json().get("models") or []))
+        providers["ollama"] = {"available": True, "url": raw, "models": models}
     except Exception:  # noqa: BLE001
-        providers["ollama"] = {"available": False, "url": s.ollama_base_url or "http://localhost:11434", "models": []}
+        providers["ollama"] = {"available": False, "url": raw if "raw" in dir() else "http://localhost:11434", "models": []}
 
     # ── MLX / OLMX (OpenAI-compatible) ─────────────────────────────────────
     olmx_url = s.olmx_base_url or ""
