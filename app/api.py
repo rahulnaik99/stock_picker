@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
@@ -416,55 +416,96 @@ async def list_available_models() -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _run_benchmark(bench_id: str, req: BenchmarkRequest) -> None:
+    """Run ONE MODEL AT A TIME (strictly serial) so the Mac never loads two large models into RAM.
+    Every model failure is isolated — unreachable/crashed models are marked 'error' and
+    the loop moves on without aborting the whole benchmark."""
     import time as _time
     state = _benchmarks[bench_id]
     sym   = req.symbol.upper().strip()
     rows  = [{"symbol": sym, "company_name": sym, "sub_sector": ""}]
     s     = get_settings()
     saved = (s.llm_force_provider, s.llm_force_model, s.llm_timeout_seconds)
+
     try:
-        from app.export.writer import export as _export
         from app.graph.runner import run_universe
-    except Exception as exc:  # noqa: BLE001
-        state["status"] = "failed"; state["error"] = str(exc); return
+    except Exception as exc:           # noqa: BLE001
+        state["status"] = "failed"
+        state["error"]  = f"Could not import pipeline: {exc}"
+        return
+
     for i, m in enumerate(state["models"]):
-        m["status"] = "running"
+        m["status"]     = "running"
         m["started_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-        t0 = _time.monotonic()
+        t0     = _time.monotonic()
         run_id = f"{bench_id}_m{i}"
+
         try:
             s.llm_force_provider  = m["provider"]
             s.llm_force_model     = m["model"]
             s.llm_timeout_seconds = req.timeout
-            _run_tasks[run_id] = {"status": "queued", "scope": f"benchmark:{bench_id}",
-                                   "symbols": [sym], "created_at": m["started_at"]}
+            _run_tasks[run_id] = {
+                "status": "queued", "scope": f"benchmark:{bench_id}",
+                "symbols": [sym], "created_at": m["started_at"],
+            }
+
             _, ranked = await run_universe(
-                rows, as_of=req.as_of, run_id=run_id, mode="inprocess", concurrency=1, refresh=False)
-            r = ranked[0] if ranked else None
+                rows, as_of=req.as_of, run_id=run_id,
+                mode="inprocess", concurrency=1, refresh=False,
+            )
+            r       = ranked[0] if ranked else None
             elapsed = round(_time.monotonic() - t0)
+
             m.update({
-                "status": "done", "run_id": run_id, "elapsed_seconds": elapsed,
-                "final_score":       round(r.final_score, 3)    if r and r.final_score is not None else None,
-                "direction":         r.direction_view            if r else None,
-                "trade_status":      r.trade_status              if r else None,
-                "data_completeness": round(r.data_completeness, 3) if r and r.data_completeness else None,
-                "agent_scores":      {k: round(v.score, 2) for k, v in (r.agent_results or {}).items()
+                "status":            "done",
+                "run_id":            run_id,
+                "elapsed_seconds":   elapsed,
+                "final_score":       round(r.final_score, 3)
+                                     if r and r.final_score is not None else None,
+                "direction":         r.direction_view if r else None,
+                "trade_status":      r.trade_status   if r else None,
+                "data_completeness": round(r.data_completeness, 3)
+                                     if r and r.data_completeness else None,
+                "agent_scores":      {k: round(v.score, 2)
+                                      for k, v in (r.agent_results or {}).items()
                                       if v and v.score is not None} if r else {},
-                "risk_flags":        (r.risk_flags or [])[:6]   if r else [],
-                "reasoning_summary": ((r.reasoning_summary or "")[:600]) if r else "",
-                "token_usage":       (r.token_usage or {})       if r else {},
+                "risk_flags":        (r.risk_flags or [])[:6]        if r else [],
+                "reasoning_summary": (r.reasoning_summary or "")[:600] if r else "",
+                "token_usage":       (r.token_usage or {})            if r else {},
                 "error":             None,
             })
-            try: progress.finish_run(run_id, "completed")
-            except Exception: pass  # noqa: BLE001
-        except Exception as exc:  # noqa: BLE001
-            m.update({"status": "error", "error": str(exc)[:300],
-                      "elapsed_seconds": round(_time.monotonic() - t0)})
+            try:
+                progress.finish_run(run_id, "completed")
+            except Exception:          # noqa: BLE001
+                pass
+
+        except Exception as exc:       # noqa: BLE001 — isolate per-model failures
+            elapsed = round(_time.monotonic() - t0)
+            err_str = str(exc)
+            err_low = err_str.lower()
+            if "initialize samplers" in err_low:
+                reason = "Model incompatible with Ollama (GGUF sampler error). Try a different quantisation."
+            elif "connection refused" in err_low or "connec" in err_low:
+                reason = f"Cannot reach inference server for '{m['model']}'. Is Ollama running?"
+            elif "400" in err_str and "invalid_request" in err_low:
+                reason = "Model rejected the request (HTTP 400). May not support this prompt format."
+            elif "timeout" in err_low or "timed out" in err_low:
+                reason = f"Timed out after {elapsed}s. Increase the timeout or use a smaller model."
+            else:
+                reason = err_str[:300]
+            m.update({"status": "error", "error": reason, "elapsed_seconds": elapsed})
+            logger.get_logger(__name__).warning(
+                "Benchmark %s model[%d] '%s' failed (%ds): %s",
+                bench_id, i, m["model"], elapsed, reason[:120])
+
         finally:
+            # Always restore before the next model, even if the run crashed
             s.llm_force_provider, s.llm_force_model, s.llm_timeout_seconds = saved
-        state["completed"] = i + 1
+
+        state["completed"] = i + 1    # update outside try so UI sees count even after error
+
     state["status"]      = "completed"
     state["finished_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+
 
 
 @app.post("/api/benchmark", tags=["benchmark"], status_code=202)
