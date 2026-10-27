@@ -163,6 +163,7 @@ td.reason{white-space:normal;min-width:240px;color:#45506a}
 <div class="footer links">Local application · <a href="/docs" target="_blank" rel="noreferrer">API docs</a><a href="/health" target="_blank" rel="noreferrer">Health</a> · Keep this service bound to localhost unless authentication is configured.</div>
 </main>
 <script>
+const $ = id => document.getElementById(id);
 const PROVIDER_LABELS={'ollama':'Ollama','olmx':'MLX / OLMX','openai':'OpenAI','vllm':'vLLM'};
 let _modelData={};
 async function loadModels(){
