@@ -134,9 +134,8 @@ td.reason{white-space:normal;min-width:240px;color:#45506a}
     <option value="600">600 s</option>
     <option value="900">15 min</option>
   </select>
-  <button class="secondary" id="refreshModels" title="Re-scan inference servers" style="padding:9px 12px;min-width:0">↻</button>
 </div>
-<div id="modelStatus" class="hint" style="color:var(--muted);font-size:11px;margin-bottom:10px"><span class="loading"></span> Scanning…</div>
+<div id="modelStatus" class="hint" style="color:var(--muted);font-size:11px;margin-bottom:10px">Loading…</div>
 <div class="hint" style="font-size:11px;color:var(--muted);margin-bottom:10px">⏱ Timeout applies per-agent LLM call. Raise it for large/slow models (gemma4, 14B+).</div>
 <div class="controls"><label><input type="checkbox" id="stub"> Demo mode (stub LLM)</label><label><input type="checkbox" id="refresh" checked> Refresh stale data</label><label><input type="checkbox" id="forceRefresh"> Force refresh</label></div>
 <div class="notice" id="notice"></div><div class="run-actions"><span class="selected-count" id="selectionCount">0 stocks selected</span><button id="startRun">▶ Start scoring run</button></div>
@@ -164,31 +163,24 @@ td.reason{white-space:normal;min-width:240px;color:#45506a}
 <div class="footer links">Local application · <a href="/docs" target="_blank" rel="noreferrer">API docs</a><a href="/health" target="_blank" rel="noreferrer">Health</a> · Keep this service bound to localhost unless authentication is configured.</div>
 </main>
 <script>
-const PROVIDER_LABELS={'ollama':'Ollama','mlx':'MLX / OLMX','vllm':'vLLM','docker':'Docker AI'};
+const PROVIDER_LABELS={'ollama':'Ollama','olmx':'MLX / OLMX','openai':'OpenAI','vllm':'vLLM'};
 let _modelData={};
 async function loadModels(){
-  $('modelStatus').innerHTML='<span class="loading"></span> Scanning inference servers…';
+  $('modelStatus').textContent='Loading…';
   try{
     const d=await api('/api/models');
     _modelData=d;
     const sel=$('modelSelect');
     sel.innerHTML='<option value="">⚙ Default (model_config.json per agent)</option>';
-    if(d.default?.model){
-      const sep=document.createElement('option');
-      sep.disabled=true;
-      sep.textContent=`   ─── default: ${d.default.provider}/${d.default.model} ───`;
-      sel.appendChild(sep);
-    }
+    const catalog=d.catalog||{};
     let total=0;
-    for(const [key,label] of Object.entries(PROVIDER_LABELS)){
-      const p=d.providers?.[key];
-      if(!p?.available||!p.models?.length)continue;
+    for(const [prov,models] of Object.entries(catalog)){
+      if(!Array.isArray(models)||!models.length)continue;
+      const label=PROVIDER_LABELS[prov]||prov;
       const grp=document.createElement('optgroup');
-      grp.label=label+' ('+p.models.length+')';
-      for(const m of p.models){
+      grp.label=`${label} (${models.length})`;
+      for(const m of models){
         const opt=document.createElement('option');
-        // value encodes provider+model as JSON so we can split them on submit
-        const prov=key==='mlx'?'olmx':key;
         opt.value=JSON.stringify({provider:prov,model:m});
         opt.textContent=m;
         grp.appendChild(opt);
@@ -196,28 +188,19 @@ async function loadModels(){
       }
       sel.appendChild(grp);
     }
-    const pills=Object.entries(PROVIDER_LABELS).map(([k,lbl])=>{
-      const p=d.providers?.[k]||{};
-      const ok=p.available&&p.models?.length>0;
-      return `<span class="model-badge${ok?'':' unavail'}">${lbl}: ${ok?p.models.length+' models':'—'}</span>`;
-    }).join(' ');
-    $('modelStatus').innerHTML=pills+(total?'':' &nbsp;No local models found — default will be used');
+    $('modelStatus').textContent=total?`${total} models — edit app/config/llm_catalog.json to add more`:'No models in catalog';
   }catch(e){
-    $('modelStatus').textContent='Could not reach inference servers ('+e.message+')';
+    $('modelStatus').textContent='Could not load model catalog';
   }
 }
+let universe=[], selected=new Set(), runs=[], activeRunId=null, results=[], pollToken=0;
 $('modelSelect').addEventListener('change',()=>{
-  const v=$('modelSelect').value;
-  const m=v?JSON.parse(v).model:'';
-  // Auto-suggest a higher timeout for large models (7B+ typically need > 120s on M1)
+  const v=$('modelSelect').value;if(!v)return;
+  const m=JSON.parse(v).model;
   const size=parseInt((m.match(/:(\d+)b/i)||m.match(/(\d+)b/i)||[])[1])||0;
   const sel=$('timeoutSelect');
-  if(size>=30)      sel.value='900';
-  else if(size>=13) sel.value='600';
-  else if(size>=7)  sel.value='300';
-  else if(size>0)   sel.value='180';
+  if(size>=30)sel.value='900';else if(size>=13)sel.value='600';else if(size>=7)sel.value='300';else if(size>0)sel.value='180';
 });
-let universe=[], selected=new Set(), runs=[], activeRunId=null, results=[], pollToken=0;
 const AGENTS=[['fundamental','Fundamental'],['industry','Industry'],['indicator','Indicator'],['trader','Trader'],['rs_agent','RS'],['quant_risk','Q.Risk'],['promoter_intel','Promoter'],['catalyst_quality','Catalyst'],['investment_trend','Inv.Trend'],['option_chain','Options'],['decision_maker','Decision']];
 const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => Number(n||0).toLocaleString();

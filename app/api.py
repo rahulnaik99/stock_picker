@@ -376,85 +376,26 @@ async def get_run_traces(run_id: str, symbol: str = Query(..., min_length=1, max
 
 @app.get("/api/models", tags=["config"])
 async def list_available_models() -> dict[str, Any]:
-    """Enumerate models available across every local inference server (Ollama, MLX/OLMX, vLLM, Docker AI).
-    Also returns the current default from model_config.json. Used by the UI model selector."""
-    import httpx
-    s = get_settings()
-
-    async def _openai_models(url: str, api_key: str = "") -> list[str]:
-        """Fetch the model list from any OpenAI-compatible /v1/models endpoint."""
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{url.rstrip('/')}/models", headers=headers)
-            r.raise_for_status()
-            return [m["id"] for m in (r.json().get("data") or [])]
-
-    providers: dict[str, Any] = {}
-
-    # ── Ollama (/api/tags) ──────────────────────────────────────────────────
-    # Ollama's native model-list API is always at the ROOT (no /v1).
-    # Strip any trailing /v1 that may come from OLLAMA_BASE_URL in .env
-    # (that suffix is for the OpenAI-compat LLM endpoint, not the tags API).
+    """Return the LLM catalog from app/config/llm_catalog.json.
+    Edit that file to add/remove models — no server restart needed, change takes effect on next call."""
+    import json, pathlib
+    catalog_path = pathlib.Path(__file__).parent / "config" / "llm_catalog.json"
     try:
-        raw = (s.ollama_base_url or "http://localhost:11434").rstrip("/")
-        if raw.endswith("/v1"):
-            raw = raw[:-3]      # "http://localhost:11434/v1" → "http://localhost:11434"
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            r = await client.get(f"{raw}/api/tags")
-            r.raise_for_status()
-            models = sorted(m["name"] for m in (r.json().get("models") or []))
-        providers["ollama"] = {"available": True, "url": raw, "models": models}
+        catalog: dict[str, list[str]] = json.loads(catalog_path.read_text())
     except Exception:  # noqa: BLE001
-        providers["ollama"] = {"available": False, "url": raw if "raw" in dir() else "http://localhost:11434", "models": []}
+        catalog = {}
 
-    # ── MLX / OLMX (OpenAI-compatible) ─────────────────────────────────────
-    olmx_url = s.olmx_base_url or ""
-    if olmx_url:
-        try:
-            models = await _openai_models(olmx_url, s.olmx_api_key or "")
-            providers["mlx"] = {"available": True, "url": olmx_url, "models": sorted(models)}
-        except Exception:  # noqa: BLE001
-            providers["mlx"] = {"available": False, "url": olmx_url, "models": []}
-    else:
-        providers["mlx"] = {"available": False, "url": "http://localhost:8008/v1", "models": []}
-
-    # ── vLLM — probe common ports (8000, 8080, 8081) ───────────────────────
-    vllm_found: dict[str, Any] = {"available": False, "url": "", "models": []}
-    for port in (8000, 8080, 8081):
-        try:
-            url = f"http://localhost:{port}/v1"
-            models = await _openai_models(url)
-            if models:
-                vllm_found = {"available": True, "url": url, "models": sorted(models)}
-                break
-        except Exception:  # noqa: BLE001
-            pass
-    providers["vllm"] = vllm_found
-
-    # ── Docker AI (docker model ls) ─────────────────────────────────────────
-    docker_models: list[str] = []
-    try:
-        import subprocess
-        proc = subprocess.run(
-            ["docker", "model", "ls", "--format", "{{.Name}}"],
-            capture_output=True, text=True, timeout=4)
-        if proc.returncode == 0:
-            docker_models = [ln.strip() for ln in proc.stdout.strip().splitlines() if ln.strip()]
-    except Exception:  # noqa: BLE001
-        pass
-    providers["docker"] = {"available": bool(docker_models), "models": docker_models}
-
-    # ── Current default from model_config.json ─────────────────────────────
+    # Default model from model_config.json
     default_info: dict[str, str] = {}
     try:
         from app.service.models.llm_factory import resolve_spec
         spec = resolve_spec("default")
         default_info = {"provider": spec.provider, "model": spec.model}
     except Exception:  # noqa: BLE001
-        default_info = {"provider": s.llm_provider or "ollama", "model": "nemotron-e4b-16k:latest"}
+        default_info = {"provider": "ollama", "model": "nemotron-e4b-16k:latest"}
 
-    total = sum(len(p.get("models") or []) for p in providers.values())
-    return {"providers": providers, "default": default_info, "total_models": total}
+    total = sum(len(v) for v in catalog.values() if isinstance(v, list))
+    return {"catalog": catalog, "default": default_info, "total_models": total}
 
 
 @app.get("/api/chart/{symbol}", tags=["charts"])
