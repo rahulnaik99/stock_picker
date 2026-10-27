@@ -57,19 +57,33 @@ def main(argv: list[str] | None = None) -> int:
     zones = indicators.demand_supply_zones(daily.tail(420), None)
     long_plan = indicators.build_trade_plan(zones, capital=a.capital, risk_pct=a.risk_pct, force_bias="long")
     short_plan = indicators.build_trade_plan(zones, capital=a.capital, risk_pct=a.risk_pct, force_bias="short")
-    # Fetch upcoming events for chart markers (requires NSE session; skipped gracefully if unavailable).
+
+    # Fetch 15-min candles for the intraday timing panel (FYERS only; skipped gracefully if unavailable)
+    intraday_15m = None
+    try:
+        from app.mcp_server.tools.market import fetch_candles as _fc
+        i15, _ = _fc(sym, "15", 5, None)   # last 5 trading days of 15-min bars
+        if len(i15) >= 10:
+            intraday_15m = i15
+            print(f"Loaded {len(i15)} 15-min bars from FYERS")
+    except Exception:
+        print("15-min data unavailable (FYERS token not set or expired) — intraday panel will show placeholder")
+
+    # Fetch upcoming events for chart markers (NSE session; optional)
     events: list[dict] = []
     try:
         from app.mcp_server.tools import nse as nse_tools
-        nse_tools._get_session()          # warms the session quietly
+        nse_tools._get_session()
         ev = nse_tools.nse_company_events(sym, days=90)
         if ev.get("status") == "ok":
             events = ev.get("data") or []
-    except Exception:  # noqa: BLE001 - events are optional; don't fail the chart
+    except Exception:
         pass
+
     Path(out).parent.mkdir(parents=True, exist_ok=True)
-    from app.viz.chart import plot_dual_chart
-    plot_dual_chart(daily, zones, long_plan, short_plan, out, symbol=sym, lookback=a.lookback, events=events)
+    from app.viz.chart import plot_quad_chart
+    plot_quad_chart(daily, intraday_15m, zones, long_plan, short_plan, out,
+                    symbol=sym, events=events, lookback_plan=a.lookback)
     print(f"Wrote: {out}")
     print(f"LONG  plan: entry {long_plan.get('entry')} / SL {long_plan.get('stop_loss')} / target {long_plan.get('target')} | R:R {long_plan.get('risk_reward')} qty {long_plan.get('quantity')}")
     print(f"SHORT plan: entry {short_plan.get('entry')} / SL {short_plan.get('stop_loss')} / target {short_plan.get('target')} | R:R {short_plan.get('risk_reward')} qty {short_plan.get('quantity')}")

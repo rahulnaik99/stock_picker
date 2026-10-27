@@ -413,12 +413,21 @@ async def get_chart(symbol: str, lookback: int = Query(default=160, ge=30, le=42
                 events = ev.get("data") or []
         except Exception:  # noqa: BLE001
             pass
-        from app.viz.chart import plot_dual_chart
+        # fetch 15-min candles for intraday panel
+        intraday_15m = None
+        try:
+            from app.mcp_server.tools.market import fetch_candles as _fc
+            i15, _ = _fc(sym, "15", 5, None)
+            if len(i15) >= 10:
+                intraday_15m = i15
+        except Exception:  # noqa: BLE001
+            pass
+        from app.viz.chart import plot_quad_chart
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             tmp_path = tmp.name
         try:
-            plot_dual_chart(daily, zones, long_plan, short_plan, tmp_path, symbol=sym,
-                            lookback=lookback, events=events)
+            plot_quad_chart(daily, intraday_15m, zones, long_plan, short_plan, tmp_path,
+                            symbol=sym, lookback_plan=lookback, events=events)
             img = open(tmp_path, "rb").read()
         finally:
             os.unlink(tmp_path)

@@ -1,9 +1,11 @@
 """Technical chart rendering for the Trader lens.
 
-`plot_trade_chart` / `plot_dual_chart` — price + EMAs + demand/supply zones + VWAP + volume sub-panel
-+ event markers (past = vertical lines, upcoming = annotation box).
-
-The dual chart deliberately makes the two panels VISUALLY DISTINCT:
+`plot_trade_chart` / `plot_dual_chart` — original dual plan chart (backward-compat).
+`plot_quad_chart` — the full 3-row, 2-column quad chart:
+  Row 0 (context):    Long-term daily (1D, 365 bars)  |  Short-term 15-min (entry timing)
+  Row 1 (plans):      LONG plan (demand focus)         |  SHORT plan (supply focus)
+  Row 2 (volume):     Volume for LONG plan             |  Volume for SHORT plan
++ event markers and MTF badge on every panel.
   LEFT  (LONG)  — demand zones bright green, supply zones faded
   RIGHT (SHORT) — supply zones bright red,  demand zones faded
 plus a profit-zone fill and directional arrow so a trader can read it at a glance.
@@ -259,6 +261,152 @@ def plot_dual_chart(daily: pd.DataFrame, zones: dict[str, Any],
         f"LEFT: green zones = demand (long setup)   RIGHT: red zones = supply (short setup)   "
         f"volume bars show conviction",
         fontsize=9.5, color="#334155", y=1.005)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fig.tight_layout(pad=1.5)
+    fig.savefig(path, facecolor=_BG, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+# ──────────────────────────────────────────────────── quad chart helpers ────
+
+def _draw_longterm(ax: plt.Axes, daily: pd.DataFrame, zones: dict[str, Any],
+                   lookback: int = 365) -> None:
+    """Long-term daily context panel: more bars, EMA200 prominent, all zones visible, no plan lines."""
+    d = daily.sort_values("time").tail(lookback).reset_index(drop=True)
+    x = pd.to_datetime(d["time"])
+    ax.set_facecolor("#fafffe")  # very faint green tint = "trend / structure"
+    ax.grid(True, color=_GRID, linewidth=0.4, zorder=0)
+    ax.vlines(x, d["low"], d["high"], color="#c8cfd8", linewidth=0.4, zorder=1)
+    ax.plot(x, d["close"], color=_PRICE, linewidth=1.2, label="Close", zorder=3)
+    for key, col in _EMA.items():
+        span = int(key[3:])
+        if len(d) >= span:
+            lw = 1.8 if span == 200 else 1.0
+            ax.plot(x, d["close"].ewm(span=span, adjust=False).mean(),
+                    color=col, linewidth=lw, alpha=0.95, label=key.upper(), zorder=2)
+    nd, ns = zones.get("nearest_demand"), zones.get("nearest_supply")
+    xmax = x.iloc[-1]
+    for z in (zones.get("demand_zones") or []):
+        ax.axhspan(z["low"], z["high"], color=_DEMAND, alpha=0.14, zorder=0)
+    for z in (zones.get("supply_zones") or []):
+        ax.axhspan(z["low"], z["high"], color=_SUPPLY, alpha=0.14, zorder=0)
+    if nd:
+        ax.text(xmax, nd["high"], f"  D{nd['low']}–{nd['high']}",
+                color=_DEMAND, fontsize=6.5, va="bottom", ha="left", clip_on=True)
+    if ns:
+        ax.text(xmax, ns["low"], f"  S{ns['low']}–{ns['high']}",
+                color=_SUPPLY, fontsize=6.5, va="top", ha="left", clip_on=True)
+    ax.set_title("Long Term — 1D (big picture, EMA structure, key zones)", fontsize=10,
+                 color="#2c5282", weight="bold", pad=5)
+    ax.legend(loc="upper left", fontsize=7, framealpha=0.9)
+    ax.set_ylabel("price (INR)", fontsize=8)
+
+
+def _draw_15min(ax: plt.Axes, intraday: pd.DataFrame | None, long_plan: dict[str, Any],
+                short_plan: dict[str, Any], lookback: int = 120) -> None:
+    """Short-term 15-min panel for entry timing. Shows fast EMAs and plan levels as reference lines."""
+    ax.set_facecolor("#f5f7ff")   # faint blue tint = "timing"
+    ax.grid(True, color=_GRID, linewidth=0.4, zorder=0)
+    if intraday is None or len(intraday) < 10:
+        ax.text(0.5, 0.5, "15-min data not available\n(FYERS token required for intraday)",
+                transform=ax.transAxes, ha="center", va="center", fontsize=10, color="#888",
+                bbox=dict(facecolor="white", alpha=0.8, boxstyle="round"))
+        ax.set_title("Short Term — 15min (entry timing)", fontsize=10, color="#1a3a6b", weight="bold", pad=5)
+        return
+    d = intraday.sort_values("time").tail(lookback).reset_index(drop=True)
+    x = pd.to_datetime(d["time"])
+    ax.vlines(x, d["low"], d["high"], color="#adb5bd", linewidth=0.5, zorder=1)
+    ax.plot(x, d["close"], color=_PRICE, linewidth=1.3, label="Close", zorder=3)
+    # Fast EMAs suited to intraday (9 and 20)
+    for span, col, lbl in [(9, "#ff6b35", "EMA9"), (20, _EMA["ema20"], "EMA20")]:
+        if len(d) >= span:
+            ax.plot(x, d["close"].ewm(span=span, adjust=False).mean(),
+                    color=col, linewidth=1.0, alpha=0.9, label=lbl, zorder=2)
+    # Reference levels from both plans (faint — just for orientation)
+    for plan, entry_col, lbl in [(long_plan, _LONG_E, "L"), (short_plan, _SHORT_E, "S")]:
+        for lkey, style, alpha in [("entry", "-", 0.85), ("stop_loss", "--", 0.5), ("target", "--", 0.5)]:
+            lvl = (plan or {}).get(lkey)
+            if lvl is not None:
+                ax.axhline(lvl, color=entry_col, linestyle=style, linewidth=1.1, alpha=alpha, zorder=4)
+                ax.text(x.iloc[-1], lvl, f"  {lbl}-{lkey[:1].upper()}",
+                        color=entry_col, fontsize=6.5, va="center", ha="left", clip_on=True)
+    ax.set_title("Short Term — 15min  (entry / exit timing)", fontsize=10,
+                 color="#1a3a6b", weight="bold", pad=5)
+    ax.legend(loc="upper left", fontsize=7, framealpha=0.9)
+    ax.set_ylabel("price (INR)", fontsize=8)
+
+
+# ──────────────────────────────────────────────────── QUAD CHART (main export) ────
+
+def plot_quad_chart(daily: pd.DataFrame, intraday_15m: pd.DataFrame | None,
+                    zones: dict[str, Any], long_plan: dict[str, Any], short_plan: dict[str, Any],
+                    path: str, symbol: str = "", lookback_lt: int = 365, lookback_plan: int = 160,
+                    lookback_15m: int = 120, events: list[dict[str, Any]] | None = None) -> str:
+    """Full 4-panel Trader chart:
+
+    ┌─────────────────────────┬──────────────────────────┐
+    │ Long Term — 1D          │ Short Term — 15min       │
+    │ Big picture, EMA200     │ Entry timing, fast EMAs  │
+    │ All zones visible       │ Plan levels as reference │
+    ├─────────────────────────┼──────────────────────────┤
+    │ LONG plan               │ SHORT plan               │
+    │ GREEN bg, demand focus  │ RED bg, supply focus     │
+    │ Entry/SL/Target + arrow │ Entry/SL/Target + arrow  │
+    ├─────────────────────────┼──────────────────────────┤
+    │ Volume (long plan)      │ Volume (short plan)      │
+    └─────────────────────────┴──────────────────────────┘
+    """
+    fig = plt.figure(figsize=(26, 14), dpi=110)
+    fig.patch.set_facecolor(_BG)
+    gs_ = gridspec.GridSpec(3, 2, figure=fig, height_ratios=[3.2, 4, 1],
+                            hspace=0.22, wspace=0.20)
+    # Row 0: context charts (no volume sub-panel to save space)
+    ax_lt  = fig.add_subplot(gs_[0, 0])   # long-term daily
+    ax_15m = fig.add_subplot(gs_[0, 1])   # 15-min intraday
+    # Row 1: plan charts
+    ax_lp  = fig.add_subplot(gs_[1, 0])   # LONG plan
+    ax_sp  = fig.add_subplot(gs_[1, 1])   # SHORT plan
+    # Row 2: volume for plan panels
+    axv_lp = fig.add_subplot(gs_[2, 0], sharex=ax_lp)
+    axv_sp = fig.add_subplot(gs_[2, 1], sharex=ax_sp)
+
+    # ── Row 0: Long-term context + 15-min timing ──
+    _draw_longterm(ax_lt, daily, zones, lookback=lookback_lt)
+    _draw_events(ax_lt, daily, lookback_lt, events)
+    _mtf_badge(ax_lt, zones)
+
+    _draw_15min(ax_15m, intraday_15m, long_plan, short_plan, lookback=lookback_15m)
+    plt.setp(ax_lt.get_xticklabels(), visible=False)
+    plt.setp(ax_15m.get_xticklabels(), visible=False)
+
+    # ── Row 1: LONG & SHORT plans ──
+    vc = zones.get("volume_context") or {}
+    vol_txt = f"  Vol {vc.get('trend','?')} {vc.get('ratio','?')}×" if vc else ""
+    stack = zones.get("ema_stack", "—")
+    vwap_s = zones.get("vwap_side") or "—"
+    for ax, axv, plan, side, ttxt, accent in [
+        (ax_lp, axv_lp, long_plan,  "long",
+         f"LONG  PLAN — {symbol}  |  EMA: {stack}  VWAP: {vwap_s}{vol_txt}", _DEMAND),
+        (ax_sp, axv_sp, short_plan, "short",
+         f"SHORT PLAN — {symbol}  |  EMA: {stack}  VWAP: {vwap_s}{vol_txt}", _SUPPLY),
+    ]:
+        _draw_base(ax, daily, zones, lookback_plan, side=side)
+        _draw_plan(ax, daily, plan, lookback_plan)
+        _draw_events(ax, daily, lookback_plan, events)
+        _mtf_badge(ax, zones)
+        ax.set_title(ttxt, fontsize=11, color=accent, weight="bold", pad=6)
+        ax.legend(loc="upper left", fontsize=7.5, framealpha=0.9)
+        ax.set_ylabel("price (INR)", fontsize=9)
+        plt.setp(ax.get_xticklabels(), visible=False)
+        _draw_volume(axv, daily, lookback_plan)
+
+    fig.suptitle(
+        f"Trader analysis — {symbol}   "
+        f"Top: Long-term 1D structure  |  15-min entry timing     "
+        f"Bottom: LONG plan (green)  |  SHORT plan (red)   volume shows conviction",
+        fontsize=9.5, color="#334155", y=1.01)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         fig.tight_layout(pad=1.5)
