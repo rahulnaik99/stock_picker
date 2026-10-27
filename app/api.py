@@ -461,7 +461,7 @@ async def _run_benchmark(bench_id: str, req: BenchmarkRequest) -> None:
                 "elapsed_seconds":   elapsed,
                 "final_score":       round(r.final_score, 3)
                                      if r and r.final_score is not None else None,
-                "direction":         r.direction_view if r else None,
+                "direction":         r.direction if r else None,
                 "trade_status":      r.trade_status   if r else None,
                 "data_completeness": round(r.data_completeness, 3)
                                      if r and r.data_completeness else None,
@@ -470,7 +470,10 @@ async def _run_benchmark(bench_id: str, req: BenchmarkRequest) -> None:
                                       if v and v.score is not None} if r else {},
                 "risk_flags":        (r.risk_flags or [])[:6]        if r else [],
                 "reasoning_summary": (r.reasoning_summary or "")[:600] if r else "",
-                "token_usage":       (r.token_usage or {})            if r else {},
+                "token_usage":       {
+                                         "input_tokens":  sum(a.input_tokens  for a in (r.agent_results or {}).values() if a),
+                                         "output_tokens": sum(a.output_tokens for a in (r.agent_results or {}).values() if a),
+                                     } if r else {},
                 "error":             None,
             })
             try:
