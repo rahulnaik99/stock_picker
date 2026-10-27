@@ -95,7 +95,7 @@ class BenchmarkModel(BaseModel):
 
 class BenchmarkRequest(BaseModel):
     symbol: str = Field(min_length=1, max_length=20)
-    models: list[BenchmarkModel] = Field(min_length=1, max_length=10)
+    models: list[BenchmarkModel] = Field(min_length=1)
     timeout: int = Field(default=300, ge=30, le=1800)
     as_of: str | None = None
 
