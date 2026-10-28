@@ -111,26 +111,6 @@ td.reason{white-space:normal;min-width:240px;color:#45506a}
 .model-row select{flex:1;min-width:0}
 .model-badge{font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:var(--accent-weak);color:#1e40af;border:1px solid #c7d7fb;white-space:nowrap}
 .model-badge.unavail{background:var(--gray-weak);color:#67748c;border-color:var(--line)}
-.tabnav{display:flex;gap:4px;padding:0 24px;border-bottom:1px solid var(--line);margin-bottom:0;background:var(--bg)}
-.tablink{padding:10px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
-.tablink.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tablink:hover:not(.active){color:var(--text)}
-.bench-model-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
-.bench-model-row:last-child{border-bottom:none}
-.bench-model-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
-.bench-model-name{flex:1;font-family:monospace;font-size:12px;word-break:break-all}
-.bench-model-prov{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--accent-weak);color:#1e40af;white-space:nowrap}
-.bench-prog-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
-.bench-prog-row:last-child{border-bottom:none}
-.bench-prog-name{font-family:monospace;font-size:11px;flex:1;word-break:break-all;color:var(--muted)}
-.bench-prog-bar-wrap{width:120px;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
-.bench-prog-bar{height:100%;border-radius:3px;background:var(--accent);transition:width .3s}
-.bench-table-wrap{overflow-x:auto}
-.bench-table{width:100%;border-collapse:collapse;font-size:12px}
-.bench-table th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);white-space:nowrap;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.bench-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-.bench-table tr:last-child td{border-bottom:none}
-.score-cell{font-weight:700;font-size:14px}
 .score-cell.pos{color:#16a34a}.score-cell.neg{color:#dc2626}.score-cell.neu{color:var(--muted)}
 .tok-hi b{color:var(--accent)}
 th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
@@ -140,8 +120,7 @@ th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
 </style></head>
 <body><main class="wrap">
 <header class="top"><div class="brand"><div class="logo">↗</div><div><div class="eyebrow">Research workspace</div><h1>Stock Scoring Control Center</h1><div class="sub">Select your universe, launch a run, and watch every agent work in real time.</div></div></div><div class="status" id="apiStatus"><span class="dot"></span>Checking API…</div></header>
-<nav class="tabnav"><button class="tablink active" id="tabScoring" onclick="switchTab('scoring')">Scoring</button><button class="tablink" id="tabBench" onclick="switchTab('bench')">⚡ Benchmark</button></nav>
-<div id="scoringView"><div class="layout">
+<div class="layout">
 <section class="panel"><div class="panel-head"><div><h2>Build a scoring run</h2><div class="hint">Choose individual stocks or filter the universe.</div></div><span class="badge" id="universeCount">Loading</span></div>
 <div class="toolbar"><input id="search" class="field search" placeholder="Search symbol or company…" autocomplete="off"><select id="sector" class="field select"><option value="">All sub-sectors</option></select></div>
 <div class="toolbar"><button class="secondary" id="selectVisible">Select visible</button><button class="secondary" id="clearSelection">Clear selection</button><button class="secondary" id="selectAll">Select all results</button></div>
@@ -185,57 +164,7 @@ th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
 <div class="hint">Traces are available only when the run saved raw LLM traces. The report bundles every agent's model input (system + payload) and output (raw reply) — handy to share for debugging. Raw prompts can contain market data and configuration details; keep this local dashboard private.</div>
 <div id="traceResults" class="empty">Select a completed run and a symbol, then load traces.</div></section>
 <div class="footer links">Local application · <a href="/docs" target="_blank" rel="noreferrer">API docs</a><a href="/health" target="_blank" rel="noreferrer">Health</a> · Keep this service bound to localhost unless authentication is configured.</div>
-</div><!-- /scoringView -->
 
-<!-- ── BENCHMARK VIEW ────────────────────────────────────────────────────── -->
-<div id="benchView" style="display:none">
-<div class="layout" style="grid-template-columns:1fr 1fr;gap:20px">
-
-<section class="panel">
-  <div class="panel-head"><div><h2>⚡ Benchmark</h2><div class="hint">Test multiple LLMs on one stock, compare scores and reasoning quality.</div></div></div>
-  <div style="margin:12px 0">
-    <label class="hint" style="display:block;margin-bottom:6px;font-weight:600">Stock symbol</label>
-    <input id="benchSymbol" class="field" placeholder="e.g. CANBK" style="width:100%;text-transform:uppercase" maxlength="20">
-  </div>
-  <div style="margin:12px 0">
-    <label class="hint" style="display:block;margin-bottom:8px;font-weight:600">Select models to benchmark</label>
-    <div id="benchModelList" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:4px 0"><div class="empty hint" style="padding:12px">Loading model catalog…</div></div>
-  </div>
-  <div style="margin:12px 0;display:flex;gap:10px;align-items:center">
-    <label class="hint">Timeout per model:</label>
-    <select id="benchTimeout" class="field" style="min-width:90px">
-      <option value="180">180 s</option>
-      <option value="300" selected>300 s</option>
-      <option value="600">600 s</option>
-      <option value="900">15 min</option>
-    </select>
-    <button id="startBench" style="flex:1">▶ Run Benchmark</button>
-  </div>
-  <div class="notice" id="benchNotice"></div>
-</section>
-
-<section class="panel">
-  <div class="panel-head"><div><h2>Progress</h2><div class="hint" id="benchStatusHint">Select models and a stock, then run.</div></div><span class="badge" id="benchBadge">—</span></div>
-  <div id="benchProgress"><div class="empty hint" style="padding:16px">No benchmark running.</div></div>
-  <div style="margin-top:16px;display:flex;gap:10px">
-    <button class="secondary" id="benchExport" disabled>⬇ Download report (JSON)</button>
-    <button class="secondary" id="benchCopyBtn" disabled>⎘ Copy to clipboard</button>
-  </div>
-</section>
-
-</div><!-- /layout -->
-
-<section class="panel" style="margin:0 0 20px">
-  <div class="panel-head"><div><h2>Comparison table</h2><div class="hint">Scores across agents for each model. Lower opacity = model did not complete that agent.</div></div></div>
-  <div id="benchTable"><div class="empty hint" style="padding:16px">Results appear here after benchmark completes.</div></div>
-</section>
-
-<section class="panel" style="margin:0 0 20px">
-  <div class="panel-head"><div><h2>Benchmark history</h2></div><button class="secondary" id="reloadBenches" style="font-size:12px;padding:6px 12px">↻ Refresh</button></div>
-  <div id="benchHistory"><div class="empty hint" style="padding:16px">No past benchmarks this session.</div></div>
-</section>
-
-</div><!-- /benchView -->
 </main>
 <script>
 const $ = id => document.getElementById(id);
@@ -352,168 +281,5 @@ function markdownHtml(value){let x=escapeHtml(String(value??''));const blocks=[]
 function payloadSection(title,value){let parsed=value; if(typeof value==='string'){try{parsed=JSON.parse(value)}catch{}}const content=typeof parsed==='object'&&parsed!==null?`<pre>${escapeHtml(JSON.stringify(parsed,null,2))}</pre>`:`<div class="trace-markdown">${markdownHtml(String(parsed??'—'))}</div>`;return `<div class="trace-section"><h4>${title}</h4>${content}</div>`}
 $('loadTraces').onclick=async()=>{if(!activeRunId||!$('traceSymbol').value)return;const symbol=$('traceSymbol').value;$('traceResults').innerHTML='<div class="empty"><span class="loading"></span> Loading traces…</div>';try{const d=await api(`/api/runs/${encodeURIComponent(activeRunId)}/traces?symbol=${encodeURIComponent(symbol)}`);if(!d.traces?.length){$('traceResults').innerHTML='<div class="empty">No raw trace files found for this symbol and run. The agent may have failed before making an LLM call, or trace logging may not have run.</div>';return}$('traceResults').innerHTML='<div class="trace-grid">'+d.traces.map(t=>{const reply=t.reply??'';let parsed=null;try{parsed=typeof reply==='string'?JSON.parse(reply):reply}catch{}const explanation=parsed&&typeof parsed==='object'?(parsed.reasoning||parsed.explanation||parsed.summary||'No explicit explanation field in raw response.'):'';const evidence=parsed?.evidence;const missing=parsed?.missing_data;const resultSummary=parsed&&typeof parsed==='object'?`<div class="trace-kv">${[['Score',parsed.score],['Confidence',parsed.confidence],['Status',parsed.status||'—']].map(([k,v])=>`<div><small>${k}</small><strong>${escapeHtml(v??'—')}</strong></div>`).join('')}</div>`:'';return `<article class="trace-card"><h3>${escapeHtml((t.agent||'Agent').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase()))}</h3><div class="trace-meta">Provider: ${escapeHtml(t.provider||'—')} · Model: ${escapeHtml(t.model||'—')}</div>${t.error?`<div class="notice show">${escapeHtml(t.error)}</div>`:'<span class="trace-status">Trace recorded</span>'}${resultSummary}${explanation?`<div class="trace-section"><h4>Agent explanation</h4><div class="trace-markdown">${markdownHtml(explanation)}</div></div>`:''}${Array.isArray(evidence)&&evidence.length?`<div class="trace-section"><h4>Evidence</h4><div class="trace-markdown"><ul>${evidence.map(e=>`<li>${markdownHtml(typeof e==='string'?e:(e.claim||JSON.stringify(e)))}</li>`).join('')}</ul></div></div>`:''}${Array.isArray(missing)&&missing.length?`<div class="trace-section"><h4>Missing data</h4><div class="trace-markdown"><ul>${missing.map(e=>`<li>${escapeHtml(String(e))}</li>`).join('')}</ul></div></div>`:''}<details><summary>System prompt · readable</summary><div class="trace-markdown">${markdownHtml(t.system||'—')}</div></details><details><summary>Input / user payload · formatted JSON</summary>${payloadSection('Input data',t.user)}</details><details><summary>Raw model response · readable</summary>${parsed&&typeof parsed==='object'?`<div class="trace-markdown">${markdownHtml(explanation||'No explanation returned.')}</div>${payloadSection('Structured response',parsed)}`:`<div class="trace-markdown">${markdownHtml(String(reply||'—'))}</div>`}</details><details><summary>Full trace JSON · developer view</summary>${payloadSection('Complete trace',t)}</details></article>`}).join('')+'</div>'}catch(e){$('traceResults').innerHTML=`<div class="empty">Could not load traces: ${escapeHtml(e.message)}</div>`}};
 $('downloadCsv').onclick=()=>{if(!results.length)return;const cols=[...new Set(results.flatMap(Object.keys))];const csv=[cols.map(csvCell).join(','),...results.map(r=>cols.map(c=>csvCell(r[c])).join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));a.download=`stock-ranking-${activeRunId||'results'}.csv`;a.click();URL.revokeObjectURL(a.href)};function csvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
-// ── TAB SWITCHER ─────────────────────────────────────────────────────────────
-function switchTab(t){
-  $('scoringView').style.display=t==='scoring'?'':'none';
-  $('benchView').style.display=t==='bench'?'':'none';
-  $('tabScoring').classList.toggle('active',t==='scoring');
-  $('tabBench').classList.toggle('active',t==='bench');
-  if(t==='bench'){loadBenchModels();loadBenchHistory();}
-}
-
-// ── BENCHMARK ────────────────────────────────────────────────────────────────
-let _activeBenchId=null, _benchPollToken=0;
-
-function loadBenchModels(){
-  const wrap=$('benchModelList');
-  if(wrap.dataset.loaded)return;
-  api('/api/models').then(d=>{
-    const catalog=d.catalog||{};
-    const PLABELS={'ollama':'Ollama','olmx':'MLX','openai':'OpenAI','vllm':'vLLM'};
-    let html='';
-    for(const [prov,models] of Object.entries(catalog)){
-      if(!Array.isArray(models)||!models.length)continue;
-      const pl=PLABELS[prov]||prov;
-      for(const m of models){
-        const id=`bm_${prov}_${m.replace(/[^a-z0-9]/gi,'_')}`;
-        html+=`<div class="bench-model-row"><input type="checkbox" id="${escapeHtml(id)}" data-prov="${escapeHtml(prov)}" data-model="${escapeHtml(m)}"><label for="${escapeHtml(id)}" class="bench-model-name">${escapeHtml(m)}</label><span class="bench-model-prov">${escapeHtml(pl)}</span></div>`;
-      }
-    }
-    wrap.innerHTML=html||'<div class="empty hint" style="padding:12px">No models in llm_catalog.json</div>';
-    wrap.dataset.loaded='1';
-  }).catch(()=>{wrap.innerHTML='<div class="empty hint" style="padding:12px">Could not load catalog</div>';});
-}
-
-function benchNotice(msg,show=true){const n=$('benchNotice');n.textContent=msg;n.classList.toggle('show',show);}
-
-$('startBench').onclick=async()=>{
-  const sym=($('benchSymbol').value||'').trim().toUpperCase();
-  if(!sym){benchNotice('Enter a stock symbol first.');return;}
-  const checked=[...$('benchModelList').querySelectorAll('input[type=checkbox]:checked')];
-  if(!checked.length){benchNotice('Select at least one model.');return;}
-  const models=checked.map(c=>({provider:c.dataset.prov,model:c.dataset.model}));
-  const timeout=parseInt($('benchTimeout').value)||300;
-  $('startBench').disabled=true;$('startBench').textContent='Starting…';benchNotice('',false);
-  try{
-    const d=await api('/api/benchmark',{method:'POST',body:JSON.stringify({symbol:sym,models,timeout})});
-    _activeBenchId=d.benchmark_id;
-    $('benchBadge').textContent='Running';$('benchBadge').className='badge running';
-    $('benchStatusHint').textContent=`${sym} · ${models.length} model(s) running sequentially`;
-    await pollBenchmark(d.benchmark_id);
-  }catch(e){benchNotice('Could not start: '+e.message);}
-  finally{$('startBench').disabled=false;$('startBench').textContent='▶ Run Benchmark';}
-};
-
-async function pollBenchmark(id){
-  const myToken=++_benchPollToken;
-  for(let i=0;i<360;i++){
-    if(_benchPollToken!==myToken)return;
-    let d;
-    try{d=await api(`/api/benchmark/${encodeURIComponent(id)}`);}catch(e){return;}
-    renderBenchProgress(d);
-    if(d.status==='completed'||d.status==='failed'){
-      $('benchBadge').textContent=d.status;$('benchBadge').className='badge '+(d.status==='completed'?'done':'error');
-      try{const rep=await api(`/api/benchmark/${encodeURIComponent(id)}/report`);renderBenchTable(rep);}catch{}
-      $('benchExport').disabled=false;$('benchCopyBtn').disabled=false;
-      loadBenchHistory();return;
-    }
-    await new Promise(r=>setTimeout(r,2500));
-  }
-}
-
-function renderBenchProgress(state){
-  const rows=(state.models||[]).map(m=>{
-    const pct=m.status==='done'?100:m.status==='running'?50:m.status==='error'?100:0;
-    const col=m.status==='error'?'#dc2626':m.status==='done'?'#16a34a':'var(--accent)';
-    const elapsed=m.elapsed_seconds?` · ${m.elapsed_seconds}s`:'';
-    const score=m.final_score!=null?` → score <b>${m.final_score}</b>`:'';
-    const err=m.error?` <span style="color:#dc2626">${escapeHtml(m.error.slice(0,60))}</span>`:'';
-    return `<div class="bench-prog-row">
-      <div class="bench-prog-name">${escapeHtml(m.model)}</div>
-      <div class="bench-prog-bar-wrap"><div class="bench-prog-bar" style="width:${pct}%;background:${col}"></div></div>
-      <span class="badge ${m.status}" style="min-width:64px;text-align:center">${escapeHtml(m.status)}</span>
-      <span class="hint" style="font-size:11px">${elapsed}${score}${err}</span>
-    </div>`;
-  }).join('');
-  $('benchProgress').innerHTML=rows||'<div class="empty hint" style="padding:12px">Waiting…</div>';
-}
-
-function renderBenchTable(rep){
-  const results=rep.results||[];
-  if(!results.length){$('benchTable').innerHTML='<div class="empty hint" style="padding:16px">No completed results.</div>';return;}
-  const agentKeys=Object.keys(results[0].agent_scores||{});
-  const scoreCell=v=>{if(v==null)return '<td>—</td>';const n=Number(v);const cls=n>0?'pos':n<0?'neg':'neu';return `<td class="score-cell ${cls}">${n.toFixed(2)}</td>`;};
-  const head=['Model','Score','Direction','Status','Complete','Time',...agentKeys.map(k=>k.replace(/_/g,' ')),'Risk flags'].map(h=>`<th>${h}</th>`).join('');
-  const body=results.map(m=>{
-    const sc=Number(m.final_score??0);
-    const cls=sc>0?'pos':sc<0?'neg':'neu';
-    const flags=(m.risk_flags||[]).slice(0,3).map(f=>`<span class="chip" style="font-size:10px">${escapeHtml(String(f).slice(0,40))}</span>`).join(' ');
-    return `<tr>
-      <td style="font-family:monospace;font-size:11px;max-width:180px;word-break:break-all">${escapeHtml(m.model)}<br><span class="hint" style="font-size:10px">${escapeHtml(m.provider)}</span></td>
-      <td class="score-cell ${cls}">${m.final_score!=null?Number(m.final_score).toFixed(2):'—'}</td>
-      <td><span class="badge ${(m.direction||'').toLowerCase()}">${escapeHtml(m.direction||'—')}</span></td>
-      <td><span class="badge ${(m.trade_status||'').toLowerCase()}">${escapeHtml((m.trade_status||'—').replace(/_/g,' '))}</span></td>
-      <td>${m.data_completeness!=null?Math.round(m.data_completeness*100)+'%':'—'}</td>
-      <td>${m.elapsed_seconds!=null?m.elapsed_seconds+'s':'—'}</td>
-      ${agentKeys.map(k=>scoreCell((m.agent_scores||{})[k])).join('')}
-      <td style="font-size:11px">${flags||'—'}</td>
-    </tr>`;
-  }).join('');
-  $('benchTable').innerHTML=`<div class="bench-table-wrap"><table class="bench-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
-$('benchExport').onclick=async()=>{
-  if(!_activeBenchId)return;
-  try{
-    const rep=await api(`/api/benchmark/${encodeURIComponent(_activeBenchId)}/report`);
-    const blob=new Blob([JSON.stringify(rep,null,2)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-    a.download=`benchmark_${_activeBenchId}.json`;a.click();URL.revokeObjectURL(a.href);
-  }catch(e){benchNotice('Export failed: '+e.message);}
-};
-
-$('benchCopyBtn').onclick=async()=>{
-  if(!_activeBenchId)return;
-  try{
-    const rep=await api(`/api/benchmark/${encodeURIComponent(_activeBenchId)}/report`);
-    await navigator.clipboard.writeText(JSON.stringify(rep,null,2));
-    $('benchCopyBtn').textContent='✓ Copied!';setTimeout(()=>$('benchCopyBtn').textContent='⎘ Copy to clipboard',2000);
-  }catch(e){benchNotice('Copy failed: '+e.message);}
-};
-
-async function loadBenchHistory(){
-  try{
-    const d=await api('/api/benchmarks');
-    const items=d.benchmarks||[];
-    if(!items.length){$('benchHistory').innerHTML='<div class="empty hint" style="padding:12px">No benchmarks this session.</div>';return;}
-    $('benchHistory').innerHTML=items.map(b=>`<div class="bench-prog-row" style="cursor:pointer" onclick="resumeBench('${escapeHtml(b.benchmark_id)}')">
-      <div class="bench-prog-name">${escapeHtml(b.benchmark_id)} · <b>${escapeHtml(b.symbol)}</b></div>
-      <span class="badge ${b.status}">${escapeHtml(b.status)}</span>
-      <span class="hint" style="font-size:11px">${b.completed}/${b.total} models · ${escapeHtml(b.created_at||'')}</span>
-    </div>`).join('');
-  }catch{}
-}
-
-async function resumeBench(id){
-  _activeBenchId=id;
-  $('benchBadge').textContent='Loading…';
-  try{
-    const d=await api(`/api/benchmark/${encodeURIComponent(id)}`);
-    renderBenchProgress(d);
-    $('benchStatusHint').textContent=`${d.symbol} · resumed`;
-    if(d.status==='completed'){
-      const rep=await api(`/api/benchmark/${encodeURIComponent(id)}/report`);
-      renderBenchTable(rep);
-      $('benchBadge').textContent='completed';$('benchBadge').className='badge done';
-      $('benchExport').disabled=false;$('benchCopyBtn').disabled=false;
-    }else if(d.status==='running'){
-      pollBenchmark(id);
-    }
-  }catch(e){benchNotice('Could not load: '+e.message);}
-}
-
-$('reloadBenches').onclick=loadBenchHistory;
-// ── END BENCHMARK ────────────────────────────────────────────────────────────
-
 (async()=>{Promise.all([checkHealth(),loadUniverse(),loadRuns(),loadModels()])})();
 </script></body></html>

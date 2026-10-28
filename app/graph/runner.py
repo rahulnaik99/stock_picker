@@ -9,9 +9,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.graph.builder import build_graph
-from app.jobs.refresh import format_report, refresh_stale
-from app.ledger.events import EventLedger
 from app.mcp_server.client import ToolClient
 from app.mcp_server.tools.common import now_ist, parse_as_of
 from app.schemas import StockResult
@@ -51,12 +48,14 @@ async def run_universe(rows: list[dict[str, str]], as_of: str | None = None, run
     run_id = run_id or datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
     as_of = as_of or now_ist().isoformat(timespec="seconds")
     sem = asyncio.Semaphore(concurrency or s.max_concurrent_stocks)
+    from app.ledger.events import EventLedger
     ledger = EventLedger()
     results: list[StockResult] = []
     progress.init_run(run_id, [r["symbol"] for r in rows])
 
     async with ToolClient(mode) as client:
         if refresh:
+            from app.jobs.refresh import format_report, refresh_stale
             with log_context(run_id=run_id):
                 # Always-fresh: wipe the day-gate + volatile caches so this run refetches every tool live
                 # (only for live runs; historical as_of reads stored data as-is).
@@ -66,6 +65,7 @@ async def run_universe(rows: list[dict[str, str]], as_of: str | None = None, run
                 last_refresh_report.clear()
                 last_refresh_report.update(await refresh_stale(client, rows, as_of))
                 log.info(format_report(last_refresh_report))
+        from app.graph.builder import build_graph  # lazy: avoids langgraph import at API startup
         graph = build_graph(client, cfg, ledger)
 
         async def one(row: dict[str, str]) -> StockResult:
