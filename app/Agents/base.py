@@ -226,6 +226,12 @@ async def analyze(*, agent: str, llm_key: str, symbol: str, system_prompt: str, 
                     log.error("%s hit the model's context limit. Raise it on the Ollama SERVER (per-call num_ctx is ignored by "
                               "Ollama's /v1 endpoint): build a Modelfile with `PARAMETER num_ctx 16384` (see app/config/ollama/) "
                               "or start Ollama with OLLAMA_CONTEXT_LENGTH=16384.", agent)
+                elif "nonetype" in err_low and "iterable" in err_low:
+                    last_err = (f"Model '{spec.model}' returned a malformed response the client could not parse "
+                                f"(empty/null 'choices'). Common with some MLX/OLMX builds or MTP models when "
+                                f"response_format=json_object is unsupported — set LLM_JSON_OBJECT=0 to disable it, "
+                                f"or try a non-MTP model. Original: {exc}")
+                    log.error("%s malformed provider response (%s/%s): %s", agent, spec.provider, spec.model, last_err[:300])
                 else:
                     log.error("%s LLM call failed (%s/%s): %s", agent, spec.provider, spec.model, last_err[:300])
                 break
