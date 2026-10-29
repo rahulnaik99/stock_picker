@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.mcp_server.tools.common import (IST, SourceError, clean_symbol, error, fyers_symbol, now_ist,
+from app.mcp_server.tools.common import (IST, SourceError, clean_symbol, error, fyers_symbol, is_market_open, now_ist,
                                          ok, parse_as_of, unavailable)
 from app.service.logger import get_logger
 from app.service.settings import get_settings
@@ -24,6 +24,30 @@ log = get_logger(__name__)
 # FYERS: daily history <= 366 days per call, intraday <= 100 days per call.
 _throttle_lock = threading.Lock()
 _last_call = 0.0
+
+# ── In-process candle cache ──────────────────────────────────────────────────
+# WHY: a single scoring run fires up to 8 technical agents concurrently, each calling
+# fetch_candles() for the SAME symbol/resolution. Without a cache they all hit FYERS at
+# once → rate-limit errors (that is why `get_technical_indicators` was returning "error"
+# while a slightly later `get_demand_supply_zones` succeeded).
+# POLICY:
+#   • market CLOSED  → candles don't change, cache for the whole calendar day.
+#   • market LIVE    → cache for a short TTL so agents in one run share a fetch,
+#                      but a fresh run a minute later still re-pulls live prices.
+#   • historical as_of (back-test) → cache for the whole day (immutable).
+_candle_cache: dict[tuple, tuple[float, "pd.DataFrame", str]] = {}
+_candle_lock = threading.Lock()
+_LIVE_TTL_SECONDS = 90.0
+
+
+def _candle_ttl(as_of: str | None) -> float:
+    """How long a cached candle set stays valid, in seconds."""
+    asof_dt = parse_as_of(as_of)
+    # Historical / back-test reads are immutable → cache the whole day.
+    if asof_dt.date() < now_ist().date():
+        return 86_400.0
+    # Live today: short TTL while market open, full day once it has closed.
+    return _LIVE_TTL_SECONDS if is_market_open() else 86_400.0
 
 
 def _throttle(min_interval: float = 0.25) -> None:
@@ -79,7 +103,35 @@ def _fyers_candles(symbol: str, resolution: str, start: datetime, end: datetime)
 
 def fetch_candles(symbol: str, resolution: str, days: int, as_of: str | None = None) -> tuple[pd.DataFrame, str]:
     """Return (candles, 'fyers'). Drops the still-forming bar. FYERS is the SINGLE source of market data: if it is
-    unreachable or the token is invalid we ABORT (raise) rather than substitute a less reliable provider."""
+    unreachable or the token is invalid we ABORT (raise) rather than substitute a less reliable provider.
+
+    Cached per (symbol, resolution, days, as_of-date): when the market is closed the same candles are reused all
+    day; when live they are shared for a short TTL so concurrent agents don't each hammer FYERS (which was causing
+    rate-limit 'error' results on get_technical_indicators)."""
+    sym = clean_symbol(symbol)
+    asof_dt = parse_as_of(as_of)
+    key = (sym, resolution, days, asof_dt.date().isoformat())
+    ttl = _candle_ttl(as_of)
+    now_mono = time.monotonic()
+
+    with _candle_lock:
+        hit = _candle_cache.get(key)
+        if hit is not None and (now_mono - hit[0]) < ttl:
+            return hit[1].copy(), hit[2]
+
+    df, provider = _fetch_candles_uncached(symbol, resolution, days, as_of)
+
+    with _candle_lock:
+        _candle_cache[key] = (now_mono, df.copy(), provider)
+        # Bound memory: keep only the most recent ~200 cache entries
+        if len(_candle_cache) > 200:
+            oldest = sorted(_candle_cache.items(), key=lambda kv: kv[1][0])[:50]
+            for k, _ in oldest:
+                _candle_cache.pop(k, None)
+    return df, provider
+
+
+def _fetch_candles_uncached(symbol: str, resolution: str, days: int, as_of: str | None = None) -> tuple[pd.DataFrame, str]:
     end = parse_as_of(as_of)
     start = end - timedelta(days=days)
     provider = "fyers"

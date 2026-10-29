@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from app.mcp_server.tools import fundamentals, indicators, market, news, nse, rates
 from app.mcp_server.tools import relative_strength, quant_risk
+from app.mcp_server.tools import indianapi
 
 TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
     # "get_candles" intentionally omitted — no agent declares it in TOOLS; kept in market.py for CLI/scripts only.
@@ -25,4 +26,5 @@ TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
     "macro_snapshot":           rates.macro_snapshot,
     "policy_calendar":          rates.policy_calendar,
     "news_search":              news.news_search,
+    "indianapi_news":           indianapi.indianapi_news,
 }

@@ -11,7 +11,7 @@ from app.schemas import AgentResult
 from app.scoring import baselines, validators
 
 NAME = "fundamental"
-TOOLS = ["nse_company_events", "quarterly_fundamentals", "yf_fundamentals", "news_search"]
+TOOLS = ["nse_company_events", "quarterly_fundamentals", "yf_fundamentals", "news_search", "indianapi_news"]
 
 
 def news_query(company: str) -> str:
@@ -83,7 +83,10 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     qres = await tools.call("quarterly_fundamentals", symbol=symbol, as_of=as_of, sub_sector=meta.get("sub_sector"))
     fund = await tools.call("yf_fundamentals", symbol=symbol)
     news = await tools.call("news_search", query=news_query(company), days=14, as_of=as_of)
-    results = {"nse_company_events": nse, "quarterly_fundamentals": qres, "yf_fundamentals": fund, "news_search": news}
+    # Premium market-wide financial news (one shared daily pull; empty/unavailable if no key — never fatal).
+    premium_news = await tools.call("indianapi_news", as_of=as_of, days=10)
+    results = {"nse_company_events": nse, "quarterly_fundamentals": qres, "yf_fundamentals": fund,
+               "news_search": news, "indianapi_news": premium_news}
 
     # Persist fresh events, then read back through the ledger so history + point-in-time rules apply.
     if nse["status"] == "ok":
@@ -121,6 +124,7 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
                           for e in events[:15]],
         "quarterly_results": qr,
         "yf_fundamentals": _ratios_only(fund), "news": compact(news, 6),
+        "premium_financial_news": compact(premium_news, 8) if premium_news.get("status") == "ok" else None,
         "tool_status": {k: v["status"] for k, v in results.items()},
     }
     if bank_kpis_nse:

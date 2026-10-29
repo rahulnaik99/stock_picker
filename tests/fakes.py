@@ -122,4 +122,5 @@ def fake_tools() -> dict[str, Any]:
         "macro_snapshot": lambda as_of=None: ok("fake_yf", [{"name": "USDINR", "last": 88.1, "chg_20d_pct": 0.4}]),
         "policy_calendar": lambda days_ahead=60, as_of=None: ok("fake_cal", []),
         "news_search": lambda query, days=7, as_of=None, max_items=12: ok("fake_news", [{"title": "Sector steady", "published_at": "2026-10-19T09:00:00+05:30", "url": "https://x"}]),
+        "indianapi_news": lambda as_of=None, days=7, max_items=20: ok("fake_indianapi", [{"title": "RBI holds repo; bank NIMs stable", "published_at": "2026-10-19T09:00:00+05:30", "url": "https://x", "summary": "..."}], scope="market_wide_financial"),
     }

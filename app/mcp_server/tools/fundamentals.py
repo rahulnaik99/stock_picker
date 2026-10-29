@@ -14,8 +14,31 @@ _STMT_ROWS = ("Total Revenue", "Net Interest Income", "Interest Income", "Intere
 
 def yf_fundamentals(symbol: str) -> dict[str, Any]:
     """Valuation ratios, ROE, dividend data, last 6 quarters of revenue/NII/profit, 3y dividend history (Yahoo, unofficial).
-    CURRENT snapshot only (not point-in-time). Banks' NIM/GNPA/NNPA are NOT here: read them from results filings."""
+    CURRENT snapshot only (not point-in-time). Banks' NIM/GNPA/NNPA are NOT here: read them from results filings.
+    Cached in SQLite for 7 days: valuation ratios / dividends drift slowly and only matter when a new quarter lands,
+    so re-fetching every run (the old behaviour) was pure waste — especially under ALWAYS_FRESH."""
     src = "yfinance"
+    sym = clean_symbol(symbol)
+    # ── serve from cache unless stale (>7d) or an explicit force_refresh ──
+    try:
+        from app.store.db import kv_get as _kv_get, kv_set as _kv_set
+        from app.mcp_server.tools.common import now_ist as _now, parse_any_dt as _pdt
+        from app.service.settings import get_settings as _gs
+        cached = _kv_get("yf_fund", sym)
+        if cached and not _gs().force_refresh:
+            fetched = cached.get("_fetched_at")
+            age_days = 999
+            try:
+                dt = _pdt(fetched)
+                if dt:
+                    age_days = (_now() - dt).days
+            except Exception:  # noqa: BLE001
+                pass
+            if age_days < 7:
+                return ok(src, cached["data"], symbol=sym, point_in_time=False, cache="hit",
+                          note=f"Cached {age_days}d ago; ratios refresh weekly. Cross-check with NSE results filings.")
+    except Exception:  # noqa: BLE001 - cache must never break the fetch
+        pass
     try:
         import yfinance as yf
 
@@ -35,8 +58,15 @@ def yf_fundamentals(symbol: str) -> dict[str, Any]:
                 quarters.append(row)
         divs = tk.dividends
         div_hist = [] if divs is None or divs.empty else [{"date": str(i.date()), "amount": float(v)} for i, v in divs.tail(6).items()]
-        return ok(src, {"ratios": ratios, "quarterly": quarters, "recent_dividends": div_hist},
-                  symbol=clean_symbol(symbol), point_in_time=False,
+        data = {"ratios": ratios, "quarterly": quarters, "recent_dividends": div_hist}
+        # ── store in cache ──
+        try:
+            from app.store.db import kv_set as _kv_set2
+            from app.mcp_server.tools.common import now_ist as _now2
+            _kv_set2("yf_fund", sym, {"_fetched_at": _now2().isoformat(timespec="seconds"), "data": data})
+        except Exception:  # noqa: BLE001
+            pass
+        return ok(src, data, symbol=clean_symbol(symbol), point_in_time=False, cache="refreshed",
                   note="Current snapshot; units as reported by Yahoo (INR). Cross-check with NSE results filings.")
     except Exception as exc:  # noqa: BLE001
         return error(src, exc)

@@ -20,6 +20,17 @@ def now_iso() -> str:
     return now_ist().isoformat(timespec="seconds")
 
 
+def is_market_open(at: datetime | None = None) -> bool:
+    """True if the NSE equity market is live: Mon-Fri, 09:15-15:30 IST.
+    (Holidays are not modelled; the daily cache gate still refreshes once per day so a holiday
+    simply serves yesterday's close, which is correct.)"""
+    t = (at or now_ist()).astimezone(IST)
+    if t.weekday() >= 5:               # Sat/Sun
+        return False
+    minutes = t.hour * 60 + t.minute
+    return 9 * 60 + 15 <= minutes <= 15 * 60 + 30
+
+
 # --- result envelope: every tool returns one of these, never raises ---------------------------
 def ok(source: str, data: Any, **extra: Any) -> dict[str, Any]:
     return {"status": "ok", "source": source, "retrieved_at": now_iso(), "data": data, **extra}

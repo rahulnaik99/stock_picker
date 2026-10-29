@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     fred_api_key: str = ""
     nse_cookies: str = ""
     nse_user_agent: str = ""
+    indianapi_key: str = ""        # stock.indianapi.in — premium financial news (500 req/month, 1 req/sec)
 
     # App
     universe_file: str = "app/config/universe.csv"
