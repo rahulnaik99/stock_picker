@@ -49,8 +49,8 @@ main{min-width:0;padding:0 28px 48px}
 /* ── grids / cards ──────────────────────────────────────────────────────── */
 .grid{display:grid;gap:14px}
 .g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}
-.card-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:16px}
 .mt{margin-top:14px}
 /* ── kpi cards ──────────────────────────────────────────────────────────── */
 .kpi-l{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
@@ -210,7 +210,29 @@ tr:hover td{background:var(--soft)}
 <section id="p-market" class="page">
   <div class="card-hd" style="margin-top:4px">
     <div><h1>Market overview</h1><div class="sub" id="mDate">Daily movers · Yahoo Finance bars</div></div>
-    <button class="pri sm" id="mRefresh" onclick="loadMarket(true)">↻ Refresh</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="pri sm" id="mRefresh" onclick="loadMarket(true)">↻ Refresh</button>
+    </div>
+  </div>
+  <!-- Universe switcher -->
+  <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <div class="seg" id="uniTypeSeg">
+      <button data-u="financial" class="on" onclick="switchUniType('financial')">🏦 Financial stocks</button>
+      <button data-u="nifty" onclick="switchUniType('nifty')">📊 Nifty indices</button>
+    </div>
+    <div id="niftySubSeg" style="display:none;align-items:center;gap:8px">
+      <div class="seg" id="niftyIndexSeg">
+        <button data-n="nifty500" class="on" onclick="switchNiftyIndex('nifty500')">Nifty 500 ⬇</button>
+        <button data-n="nifty50" onclick="switchNiftyIndex('nifty50')">Nifty 50</button>
+        <button data-n="niftybank" onclick="switchNiftyIndex('niftybank')">Bank</button>
+        <button data-n="niftyit" onclick="switchNiftyIndex('niftyit')">IT</button>
+        <button data-n="niftysmall" onclick="switchNiftyIndex('niftysmall')">Small Cap</button>
+        <button data-n="niftymid" onclick="switchNiftyIndex('niftymid')">Mid Cap</button>
+        <button data-n="niftylarge" onclick="switchNiftyIndex('niftylarge')">Large Cap</button>
+        <button data-n="niftyall" onclick="switchNiftyIndex('niftyall')">All Nifty</button>
+      </div>
+      <span class="hint" id="niftyNote" style="white-space:nowrap"></span>
+    </div>
   </div>
   <div class="grid g4">
     <div class="card"><div class="kpi-l">Advancers</div><div class="kpi-v up" id="kAdv">—</div></div>
@@ -544,12 +566,34 @@ function gotoStock(sym){
 /* ══════════════════════════════════════════════════════════════
    MARKET TAB
 ═══════════════════════════════════════════════════════════════ */
-let _marketData=null,_marketLoaded=false;
+let _marketData=null,_marketLoaded=false,_currentUniverse='financial',_currentNifty='nifty50';
+
+function switchUniType(type){
+  document.querySelectorAll('#uniTypeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.u===type));
+  $('niftySubSeg').style.display=type==='nifty'?'flex':'none';
+  _currentUniverse=type==='nifty'?_currentNifty:'financial';
+  _marketLoaded=false; loadMarket(false);
+}
+function switchNiftyIndex(key){
+  document.querySelectorAll('#niftyIndexSeg button').forEach(b=>b.classList.toggle('on',b.dataset.n===key));
+  _currentNifty=key; _currentUniverse=key;
+  // If Nifty 500 is cached the sub-views filter instantly; show a hint
+  const isSubset=key!=='nifty500'&&key!=='niftyall';
+  const n500cached=!!_marketData && _currentUniverse==='nifty500';
+  if($('niftyNote')){
+    $('niftyNote').textContent=isSubset?(n500cached?'(filtered from Nifty 500 cache instantly)':'(load Nifty 500 first for instant sub-views)'):'';
+  }
+  _marketLoaded=false; loadMarket(false);
+}
 async function loadMarket(force=false){
   $('mRefresh').disabled=true;$('mRefresh').innerHTML='<span class="loading"></span>';
   try{
-    const d=await api(`/api/market/movers?refresh=${force}`);
+    const d=await api(`/api/market/movers?refresh=${force}&universe=${_currentUniverse}`);
     _marketData=d;_marketLoaded=true;
+    // update the hint after response
+    if($('niftyNote')&&d.filtered_from==='nifty500'){
+      $('niftyNote').textContent='✓ filtered from Nifty 500 cache — no re-download';
+    }
     const b=d.breadth||{};
     $('kAdv').textContent=b.advancers??'—';
     $('kDec').textContent=b.decliners??'—';
@@ -736,40 +780,139 @@ function renderHealthScore(f){
   const score=f.score??50;
   const w=Math.round(score);
   const barCol=w>=70?'var(--up)':w>=45?'var(--am)':'var(--dn)';
+  const flags=(f.flags||[]).map(fl=>`
+    <div style="display:flex;align-items:flex-start;gap:7px;padding:5px 0;border-bottom:1px solid var(--line)">
+      <span style="width:18px;height:18px;border-radius:50%;background:${fl.kind==='good'?'var(--ups)':fl.kind==='bad'?'var(--dns)':'var(--ams)'};
+        color:${fl.kind==='good'?'var(--up)':fl.kind==='bad'?'var(--dn)':'var(--am)'};
+        display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px">
+        ${fl.kind==='good'?'✓':'✗'}
+      </span>
+      <span style="font-size:12px;color:var(--tx)">${esc(fl.text)}</span>
+    </div>`).join('')||'<div class="hint" style="padding:8px 0">No flags available</div>';
   $('healthBox').innerHTML=`
-    <div style="font-size:38px;font-weight:800;letter-spacing:-1px;margin:10px 0 4px">${w}<span style="font-size:16px;font-weight:400">/100</span></div>
-    <div class="progbar" style="margin:6px 0 10px"><i style="width:${w}%;background:${barCol}"></i></div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px">${(f.flags||[]).map(fl=>`<span class="flag ${esc(fl.kind)}">${fl.kind==='good'?'✓':'✗'} ${esc(fl.text)}</span>`).join('')}</div>`;
+    <div style="font-size:42px;font-weight:800;letter-spacing:-2px;margin:8px 0 4px;font-variant-numeric:tabular-nums">
+      ${w}<span style="font-size:18px;font-weight:400;color:var(--mu)">/100</span>
+    </div>
+    <div style="height:8px;background:var(--soft);border-radius:4px;overflow:hidden;margin:0 0 14px">
+      <div style="width:${w}%;height:100%;background:${barCol};border-radius:4px;transition:width .5s"></div>
+    </div>
+    ${flags}`;
 }
 function renderValuation(v){
-  const row=(l,x)=>x!=null?`<div style="min-width:110px"><div class="kpi-l">${l}</div><div style="font-size:18px;font-weight:700;margin-top:3px">${typeof x==='number'?x.toFixed(2):x}</div></div>`:'';
-  const pe=row('Trailing P/E',v.trailing_pe);
-  const fpe=row('Forward P/E',v.forward_pe);
-  const pb=row('P/B',v.price_to_book);
-  const roe=v.roe!=null?row('ROE',`${(v.roe*100).toFixed(2)}%`):row('ROE',null);
-  const div=v.dividend_yield!=null?row('Div Yield',`${(v.dividend_yield*100).toFixed(2)}%`):row('Div Yield',null);
-  $('valBox').innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px">${pe}${fpe}${pb}${roe}${div}</div>`;
+  const kpi=(l,x)=>x!=null?`<div style="flex:1;min-width:90px">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin-bottom:5px">${l}</div>
+    <div style="font-size:20px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums">${typeof x==='number'?Number(x).toFixed(2):x}</div>
+  </div>`:'';
+  const pe=kpi('Trailing P/E',v.trailing_pe);
+  const fpe=kpi('Forward P/E',v.forward_pe);
+  const pb=kpi('P/B',v.price_to_book);
+  const roe=v.roe!=null?kpi('ROE',`${(v.roe*100).toFixed(2)}%`):kpi('ROE',null);
+  const dy=v.dividend_yield!=null?kpi('Div Yield',`${(v.dividend_yield*100).toFixed(2)}%`):kpi('Div Yield',null);
+  const note=v.note?`<div class="hint" style="margin-top:10px;font-size:10px">${esc(v.note.split('.')[0])}</div>`:'';
+  $('valBox').innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:10px">${pe}${fpe}${pb}${roe}${dy}</div>${note}`;
 }
 function renderFinCharts(stmts){
-  const periods=stmts.periods||[];if(!periods.length){$('finCharts').innerHTML='<div class="empty hint">No financial statements stored. Run a scoring to import.</div>';return;}
+  const periods=stmts.periods||[];
+  if(!periods.length){
+    $('finCharts').innerHTML='<div class="empty hint" style="grid-column:span 2">No financial data. Run a scoring to import NSE results.</div>';
+    return;
+  }
   const labels=periods.map(p=>p.label||p.period_end);
-  const pats=periods.map(p=>p.pat);const revs=periods.map(p=>p.revenue);const eps=periods.map(p=>p.eps);
+  const revs=periods.map(p=>p.revenue);
+  const pats=periods.map(p=>p.pat);
+  const eps=periods.map(p=>p.eps);
+  const unit=stmts.unit||'INR crore';
   $('finCharts').innerHTML=`
-    <div class="card">${miniBarChart('Revenue vs PAT (₹ cr)',labels,[{data:revs,col:'#3498db',name:'Revenue'},{data:pats,col:'#0e9f6e',name:'PAT'}])}</div>
-    <div class="card">${miniBarChart('EPS (₹)',labels,[{data:eps,col:'#9b59b6',name:'EPS'}])}</div>`;
+    <div class="card">${svgBarChart('Revenue vs PAT (₹ cr)',labels,[{data:revs,col:'#3498db',name:'Revenue'},{data:pats,col:'#0e9f6e',name:'PAT'}])}</div>
+    <div class="card">${svgBarChart('Earnings per share (₹)',labels,[{data:eps,col:'#9b59b6',name:'EPS'}])}</div>`;
 }
-function miniBarChart(title,labels,series){
-  const allVals=series.flatMap(s=>s.data).filter(v=>v!=null);
-  if(!allVals.length)return`<h2>${esc(title)}</h2><div class="empty">Provider did not return this metric</div>`;
-  const maxV=Math.max(...allVals.map(Math.abs))||1;
-  const H=140,barH=(v)=>Math.round((Math.abs(v||0)/maxV)*H*0.9);
-  const cols=labels.length;const bw=Math.floor(200/cols)-4;
-  const bars=labels.map((lbl,i)=>`<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
-    ${series.map(s=>`<div style="width:${bw}px;height:${barH(s.data[i])}px;background:${s.col};border-radius:3px 3px 0 0" title="${s.name}: ${s.data[i]!=null?s.data[i].toFixed(0):'—'}"></div>`).join('')}
-    <div style="font-size:9px;color:var(--mu);writing-mode:vertical-rl;transform:rotate(180deg)">${esc(lbl)}</div>
-  </div>`).join('');
-  const legend=series.map(s=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:8px;height:8px;border-radius:2px;background:${s.col};display:inline-block"></span>${s.name}</span>`).join(' ');
-  return`<h2>${esc(title)}</h2><div style="display:flex;align-items:flex-end;gap:4px;margin:12px 0 8px">${bars}</div><div style="display:flex;gap:10px">${legend}</div>`;
+
+/* ── Proper SVG bar chart matching TradingAgents style ─────────────────────
+   - Full-width viewBox (scales responsively)
+   - Y-axis with grid lines and labels
+   - X-axis period labels
+   - Grouped side-by-side bars from 0-baseline
+   - ▲/▼ vs prev delta badge
+   - Color legend
+─────────────────────────────────────────────────────────────────────────── */
+function svgBarChart(title, labels, series){
+  const allVals=series.flatMap(s=>s.data).filter(v=>v!=null&&Number.isFinite(v));
+  if(!allVals.length)
+    return`<div class="card-hd"><h2>${esc(title)}</h2></div><div class="empty" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--mu);font-size:13px">Provider did not return this metric</div>`;
+
+  const W=560, H=220;
+  const pad={l:62,r:14,t:36,b:46};
+  const cW=W-pad.l-pad.r, cH=H-pad.t-pad.b;
+
+  const dataMin=Math.min(0,...allVals);
+  const dataMax=Math.max(...allVals);
+  const range=dataMax-dataMin||1;
+  const yMin=dataMin<0?dataMin-range*0.08:0;
+  const yMax=dataMax+range*0.12;
+  const yRange=yMax-yMin;
+
+  const scaleY=v=>pad.t+cH*(1-(v-yMin)/yRange);
+  const zero=scaleY(0);
+
+  // y-axis ticks
+  const nTicks=5;
+  const tickVals=Array.from({length:nTicks+1},(_,i)=>yMin+(yRange*i/nTicks));
+  const fmtY=v=>{const a=Math.abs(v);return a>=1e5?`${(v/1e5).toFixed(1)}L`:a>=1e3?`${(v/1e3).toFixed(0)}k`:v.toFixed(0);};
+
+  const yAxis=tickVals.map(v=>`
+    <line x1="${pad.l}" y1="${scaleY(v).toFixed(1)}" x2="${W-pad.r}" y2="${scaleY(v).toFixed(1)}" stroke="var(--line)" stroke-width="0.8"/>
+    <text x="${pad.l-6}" y="${(scaleY(v)+4).toFixed(1)}" text-anchor="end" fill="var(--mu)" font-size="10">${fmtY(v)}</text>`).join('');
+
+  // zero line (heavier)
+  const zeroLine=`<line x1="${pad.l}" y1="${zero.toFixed(1)}" x2="${W-pad.r}" y2="${zero.toFixed(1)}" stroke="var(--tx)" stroke-width="0.4" opacity="0.4"/>`;
+
+  // bars
+  const n=labels.length, ns=series.length;
+  const groupW=cW/n;
+  const barW=Math.min(28, groupW*0.7/ns);
+  const gap=barW*0.15;
+  const groupOffset=(ns-1)/2;
+
+  const barElems=labels.map((lbl,i)=>{
+    const gx=pad.l+i*groupW+groupW/2;
+    const barGroup=series.map((s,si)=>{
+      const v=s.data[i];
+      if(v==null||!Number.isFinite(v))return'';
+      const x=(gx+(si-groupOffset)*(barW+gap)-barW/2).toFixed(1);
+      const yTop=Math.min(scaleY(v),zero);
+      const barH=Math.abs(scaleY(v)-zero)||1;
+      return`<rect x="${x}" y="${yTop.toFixed(1)}" width="${barW}" height="${barH.toFixed(1)}" fill="${s.col}" rx="2" opacity="0.9">
+        <title>${s.name}: ${v.toLocaleString('en-IN',{maximumFractionDigits:1})}</title></rect>`;
+    }).join('');
+    // x-axis label
+    const xLabel=`<text x="${gx.toFixed(1)}" y="${(H-pad.b+14).toFixed(1)}" text-anchor="middle" fill="var(--mu)" font-size="9.5">${esc(String(lbl).slice(0,7))}</text>`;
+    return barGroup+xLabel;
+  }).join('');
+
+  // delta badge: last vs second-last for first series
+  let badge='';
+  const s0=series[0].data;
+  const lastValid=s0.map((v,i)=>[i,v]).filter(([,v])=>v!=null&&Number.isFinite(v));
+  if(lastValid.length>=2){
+    const [,prev]=lastValid[lastValid.length-2];
+    const [,last]=lastValid[lastValid.length-1];
+    if(prev&&last!=null){
+      const pct=((last-prev)/Math.abs(prev)*100);
+      const up=pct>=0;
+      badge=`<div style="position:absolute;top:0;right:0;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:${up?'var(--ups)':'var(--dns)'};color:${up?'var(--up)':'var(--dn)'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% vs prev</div>`;
+    }
+  }
+
+  // legend
+  const legend=series.map(s=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--mu)">
+    <span style="width:10px;height:10px;border-radius:2px;background:${s.col};display:inline-block;flex-shrink:0"></span>${esc(s.name)}</span>`).join('');
+
+  const svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible">${yAxis}${zeroLine}${barElems}</svg>`;
+
+  return`<div class="card-hd" style="position:relative">
+    <h2 style="margin:0">${esc(title)}</h2>${badge}</div>
+    ${svg}
+    <div style="display:flex;gap:14px;margin-top:6px;flex-wrap:wrap">${legend}</div>`;
 }
 
 /* ══════════════════════════════════════════════════════════════

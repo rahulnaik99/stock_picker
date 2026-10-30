@@ -27,6 +27,77 @@ router = APIRouter()
 _MOVERS_CACHE: dict[str, Any] = {}
 _MOVERS_LOCK = threading.Lock()
 
+# ── Nifty index constituents (NSE symbols, no .NS suffix) ────────────────────
+_NIFTY50 = [
+    "ADANIENT","ADANIPORTS","APOLLOHOSP","ASIANPAINT","AXISBANK",
+    "BAJAJ-AUTO","BAJFINANCE","BAJAJFINSV","BPCL","BHARTIARTL",
+    "BRITANNIA","CIPLA","COALINDIA","DIVISLAB","DRREDDY",
+    "EICHERMOT","GRASIM","HCLTECH","HDFCBANK","HDFCLIFE",
+    "HEROMOTOCO","HINDALCO","HINDUNILVR","ICICIBANK","INDUSINDBK",
+    "INFY","ITC","JSWSTEEL","KOTAKBANK","LT",
+    "M&M","MARUTI","NESTLEIND","NTPC","ONGC",
+    "POWERGRID","RELIANCE","SBILIFE","SBIN","SHRIRAMFIN",
+    "SUNPHARMA","TATACONSUM","TATAMOTORS","TATASTEEL","TCS",
+    "TECHM","TITAN","ULTRACEMCO","UPL","WIPRO",
+]
+_NIFTY_BANK = [
+    "AXISBANK","BANDHANBNK","FEDERALBNK","HDFCBANK","ICICIBANK",
+    "IDFCFIRSTB","INDUSINDBK","KOTAKBANK","PNB","SBIN","AUBANK","BANKBARODA",
+]
+_NIFTY_IT = [
+    "COFORGE","HCLTECH","INFY","LTIM","MPHASIS",
+    "PERSISTENT","TCS","TECHM","WIPRO","OFSS",
+]
+_NIFTY_SMALLCAP = [
+    "APLAPOLLO","AARTIIND","ABFRL","AJANTPHARM","APOLLOTYRE","APTUS",
+    "BALRAMCHIN","BIKAJI","BLUESTARCO","CAMS","CANFINHOME","CARTRADE",
+    "CDSL","CENTURYPLY","CHALET","CLEAN","CROMPTON","DATAPATTNS",
+    "DELHIVERY","DOMS","EASEMYTRIP","ELGIEQUIP","EMUDHRA","ETHOSLTD",
+    "FINEORG","GENESYS","GPIL","GRINDWELL","HAPPSTMNDS","HBLPOWER",
+    "HOMEFIRST","IEXCHANGE","INDIGOPNTS","IRCTC","JINDALSAW","JYOTHYLAB",
+    "KALYANKJIL","KANSAINER","KPITTECH","LATENTVIEW","LICI","LXCHEM",
+    "MAZDOCK","MEDPLUS","METROPOLIS","MFSL","MHRIL","MINDACORP",
+    "NAVINFLUOR","NYKAA","OLECTRA","PAGEIND","PARADEEP","PFIZER",
+]
+_NIFTY_MIDCAP = [
+    "ABB","ABCAPITAL","ABIRLANUVO","ALKEM","AMBUJACEM","APOLLOHOSP",
+    "ASTRAL","AUBANK","AUROPHARMA","BANKBARODA","BERGEPAINT","BHARATFORG",
+    "CHOLAFIN","COFORGE","CONCOR","CUMMINSIND","DEEPAKNTR","DIXON",
+    "FEDERALBNK","GLENMARK","GODREJPROP","GUJGASLTD","HAVELLS","IDFCFIRSTB",
+    "INDUSTOWER","INDHOTEL","IRFC","JKCEMENT","JUBLFOOD","LICHSGFIN",
+    "LTTS","LUPIN","MCDOWELL-N","MFSL","MOTILALOFS","MUTHOOTFIN",
+    "NAUKRI","NMDC","OBEROIRLTY","OFSS","PETRONET","PIIND",
+    "POLYCAB","PRESTIGE","PVRINOX","RBLBANK","RECLTD","SAIL",
+    "SCHAEFFLER","SHYAMMETL","SIEMENS","SONACOMS","SRF","SUNDARMFIN",
+    "SUPREMEIND","SUZLON","TORNTPHARM","TRENT","TVSMOTOR","UBL",
+    "UNIONBANK","UNITDSPR","VEDL","VOLTAS","WHIRLPOOL","ZOMATO",
+]
+_NIFTY_NEXT50 = [
+    "ADANIGREEN","ADANITRANS","AMBUJACEM","ATGL","BHARATFORG","BIOCON","BOSCHLTD",
+    "CHOLAFIN","CONCOR","CUMMINSIND","DABUR","DMART","GLENMARK","GODREJCP",
+    "GODREJPROP","HAVELLS","HINDPETRO","HPCL","INDUSTOWER","INDHOTEL","LUPIN",
+    "MCDOWELL-N","NMDC","NAUKRI","OBEROIRLTY","OFSS","PAGEIND","PETRONET",
+    "PIIND","POLYCAB","SAIL","SIEMENS","SRF","SUNTV","SUPREMEIND","TATACOMM",
+    "TORNTPOWER","TORNTPHARM","TRENT","TVSMOTOR","UBL","UNITDSPR","VEDL",
+    "VOLTAS","ZOMATO","IPCALAB","MFSL","ICICIPRULI","WHIRLPOOL","ABB",
+]
+
+_NIFTY500 = list({s for lst in [_NIFTY50, _NIFTY_NEXT50, _NIFTY_BANK, _NIFTY_IT,
+                                  _NIFTY_MIDCAP, _NIFTY_SMALLCAP] for s in lst})
+
+_UNIVERSE_MAP: dict[str, list[dict[str, Any]] | None] = {
+    "financial": None,          # → load from universe.csv
+    "nifty50":   [{"symbol": s, "company_name": s, "sector": "Nifty 50"} for s in _NIFTY50],
+    "niftybank": [{"symbol": s, "company_name": s, "sector": "Nifty Bank"} for s in _NIFTY_BANK],
+    "niftyit":   [{"symbol": s, "company_name": s, "sector": "Nifty IT"} for s in _NIFTY_IT],
+    "niftysmall":[{"symbol": s, "company_name": s, "sector": "Nifty Small Cap"} for s in _NIFTY_SMALLCAP],
+    "niftymid":  [{"symbol": s, "company_name": s, "sector": "Nifty Mid Cap"} for s in _NIFTY_MIDCAP],
+    "niftylarge":[{"symbol": s, "company_name": s, "sector": "Nifty Large Cap"} for s in _NIFTY50],  # Nifty 50 is large-cap
+    "niftyall":  [{"symbol": s, "company_name": s, "sector": "Nifty 50"} for s in _NIFTY50] +
+                 [{"symbol": s, "company_name": s, "sector": "Nifty Mid Cap"} for s in _NIFTY_MIDCAP],
+    "nifty500":  [{"symbol": s, "company_name": s, "sector": "Nifty 500"} for s in _NIFTY500],
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  STOCK TAB — price history (FYERS first, Yahoo fallback)
@@ -189,8 +260,11 @@ def flags(symbol: str) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 #  MARKET TAB — Nifty-500 movers (yfinance batch — no better bulk source)
 # ─────────────────────────────────────────────────────────────────────────────
-def _members() -> list[dict[str, Any]]:
-    """Universe members for the movers scan. Uses our universe.csv (financials) by default."""
+def _members(universe: str = "financial") -> list[dict[str, Any]]:
+    """Return constituent list for the requested universe key."""
+    if universe in _UNIVERSE_MAP and _UNIVERSE_MAP[universe] is not None:
+        return _UNIVERSE_MAP[universe]
+    # default / "financial" → load from universe.csv
     try:
         from app.service.settings import get_settings
         import csv
@@ -203,22 +277,91 @@ def _members() -> list[dict[str, Any]]:
         return []
 
 
+# Symbol sets — used to filter from the Nifty 500 superset cache
+# (all sub-indices are strict subsets of _NIFTY500)
+_INDEX_SYMBOL_SETS: dict[str, set[str]] = {
+    "nifty50":    set(_NIFTY50),
+    "niftynext50":set(_NIFTY_NEXT50),
+    "niftybank":  set(_NIFTY_BANK),
+    "niftyit":    set(_NIFTY_IT),
+    "niftysmall": set(_NIFTY_SMALLCAP),
+    "niftymid":   set(_NIFTY_MIDCAP),
+    "niftylarge": set(_NIFTY50),              # large-cap = Nifty 50
+    "niftyall":   set(_NIFTY500),             # alias for nifty500
+}
+# Keys that are Nifty sub-indices (all filterable from the nifty500 cache)
+_NIFTY_SUB_KEYS = set(_INDEX_SYMBOL_SETS.keys())
+
+
+def _build_payload(rows: list[dict[str, Any]], universe: str, source: str) -> dict[str, Any]:
+    """Turn a list of row dicts (already filtered) into the standard movers payload."""
+    rows = sorted(rows, key=lambda r: r["change_pct"], reverse=True)
+    return {
+        "universe": universe,
+        "source": source,
+        "rows": rows,
+        "gainers":  rows[:12],
+        "losers":   sorted(rows, key=lambda r: r["change_pct"])[:12],
+        "highest_volume": sorted(rows, key=lambda r: r["volume"], reverse=True)[:12],
+        "consistent_losers": sorted(
+            [r for r in rows if r.get("consecutive_down_days", 0) >= 2],
+            key=lambda r: (r["consecutive_down_days"], -(r.get("return_3d_pct") or 0)), reverse=True)[:25],
+        "three_day_winners": sorted(
+            [r for r in rows if (r.get("return_3d_pct") or 0) > 0],
+            key=lambda r: r["return_3d_pct"], reverse=True)[:25],
+        "high_volume_3d": sorted(
+            [r for r in rows if r.get("volume_ratio_5d") is not None],
+            key=lambda r: r["volume_ratio_5d"], reverse=True)[:25],
+        "breadth": {
+            "advancers": sum(r["change_pct"] > 0 for r in rows),
+            "decliners": sum(r["change_pct"] < 0 for r in rows),
+            "unchanged": sum(r["change_pct"] == 0 for r in rows),
+        },
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+
 @router.get("/api/market/movers", tags=["market"])
-def movers(refresh: bool = Query(default=False)) -> dict[str, Any]:
-    """Daily movers across the configured universe from Yahoo daily bars (5-min cached)."""
+def movers(
+    refresh: bool = Query(default=False),
+    universe: str = Query(default="financial",
+                          pattern="^(financial|nifty500|nifty50|niftybank|niftyit|niftysmall|niftymid|niftylarge|niftyall)$"),
+) -> dict[str, Any]:
+    """Daily movers across the selected universe from Yahoo daily bars (5-min cached).
+
+    Nifty 500 is the superset — all sub-index views (Nifty 50, Bank, IT, etc.)
+    are derived from it by filtering the cached rows.  One download feeds them all.
+    """
     now = time.time()
+    CACHE_TTL = 300  # 5 minutes
+
+    # ── Sub-index: check if nifty500 cache is fresh → filter instantly, no download ──
+    if universe in _NIFTY_SUB_KEYS and not refresh:
+        with _MOVERS_LOCK:
+            cached500 = _MOVERS_CACHE.get("payload_nifty500")
+            age500    = now - float(_MOVERS_CACHE.get("at_nifty500", 0))
+        if cached500 and age500 < CACHE_TTL:
+            sym_set = _INDEX_SYMBOL_SETS[universe]
+            filtered = [r for r in cached500["rows"] if r["symbol"] in sym_set]
+            return {**_build_payload(filtered, universe, cached500["source"]), "cached": True, "filtered_from": "nifty500"}
+
+    # ── Own cache hit ──
+    cache_key = f"payload_{universe}"
     with _MOVERS_LOCK:
-        cached = _MOVERS_CACHE.get("payload")
-        if cached and not refresh and now - float(_MOVERS_CACHE.get("at", 0)) < 300:
-            return {**cached, "cached": True}
-    members = _members()
+        cached = _MOVERS_CACHE.get(cache_key)
+        age    = now - float(_MOVERS_CACHE.get(f"at_{universe}", 0))
+    if cached and not refresh and age < CACHE_TTL:
+        return {**cached, "cached": True}
+
+    # ── Download ──
+    members = _members(universe)
     if not members:
         raise HTTPException(status_code=503, detail="Universe snapshot unavailable")
     try:
         import yfinance as yf, pandas as pd
         tickers = [f"{m['symbol']}.NS" for m in members]
         frame = yf.download(tickers=tickers, period="1mo", interval="1d", group_by="ticker",
-                            auto_adjust=False, progress=False, threads=True, timeout=25)
+                            auto_adjust=False, progress=False, threads=True, timeout=30)
         if frame is None or frame.empty:
             raise ValueError("provider returned no daily bars")
         rows = []
@@ -230,21 +373,20 @@ def movers(refresh: bool = Query(default=False)) -> dict[str, Any]:
                 if part.empty:
                     continue
                 closes = [float(v) for v in part["Close"].tolist()]
-                highs = [float(v) for v in part["High"].tolist()]
-                lows = [float(v) for v in part["Low"].tolist()]
-                vols = [max(0, int(v or 0)) for v in part["Volume"].tolist()]
-                close = closes[-1]; prev = closes[-2] if len(closes) > 1 else None
+                highs  = [float(v) for v in part["High"].tolist()]
+                lows   = [float(v) for v in part["Low"].tolist()]
+                vols   = [max(0, int(v or 0)) for v in part["Volume"].tolist()]
+                close  = closes[-1]
+                prev   = closes[-2] if len(closes) > 1 else None
                 change = ((close / prev) - 1) * 100 if prev else 0.0
-
-                def ret(n):
-                    return (closes[-1] / closes[-n - 1] - 1) * 100 if len(closes) > n and closes[-n - 1] else None
+                def ret(n): return (closes[-1] / closes[-n-1] - 1) * 100 if len(closes) > n and closes[-n-1] else None  # noqa: E731
                 down = 0
                 for i in range(len(closes) - 1, 0, -1):
-                    if closes[i] < closes[i - 1]: down += 1
+                    if closes[i] < closes[i-1]: down += 1
                     else: break
                 prior = vols[-6:-1]
                 avgv = sum(prior) / len(prior) if prior else None
-                rows.append({"symbol": sym, "company_name": m["company_name"], "sector": m["sector"],
+                rows.append({"symbol": sym, "company_name": m.get("company_name", sym), "sector": m.get("sector", ""),
                              "close": close, "change_pct": change, "return_3d_pct": ret(3),
                              "consecutive_down_days": down,
                              "volume_ratio_5d": (vols[-1] / avgv) if avgv and avgv > 0 else None,
@@ -252,25 +394,13 @@ def movers(refresh: bool = Query(default=False)) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 continue
         if not rows:
-            raise ValueError("no usable ticker bars")
+            raise ValueError("no usable ticker bars returned")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Market data unavailable: {type(exc).__name__}: {str(exc)[:160]}") from exc
-    rows.sort(key=lambda r: r["change_pct"], reverse=True)
-    payload = {
-        "universe": "Configured universe", "source": "Yahoo Finance daily bars; delayed/coverage-dependent",
-        "rows": rows, "gainers": rows[:12], "losers": sorted(rows, key=lambda r: r["change_pct"])[:12],
-        "highest_volume": sorted(rows, key=lambda r: r["volume"], reverse=True)[:12],
-        "consistent_losers": sorted([r for r in rows if r.get("consecutive_down_days", 0) >= 2],
-                                    key=lambda r: (r["consecutive_down_days"], -(r.get("return_3d_pct") or 0)), reverse=True)[:25],
-        "three_day_winners": sorted([r for r in rows if (r.get("return_3d_pct") or 0) > 0],
-                                    key=lambda r: r["return_3d_pct"], reverse=True)[:25],
-        "high_volume_3d": sorted([r for r in rows if r.get("volume_ratio_5d") is not None],
-                                 key=lambda r: r["volume_ratio_5d"], reverse=True)[:25],
-        "breadth": {"advancers": sum(r["change_pct"] > 0 for r in rows),
-                    "decliners": sum(r["change_pct"] < 0 for r in rows),
-                    "unchanged": sum(r["change_pct"] == 0 for r in rows)},
-        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-    }
+
+    source  = "Yahoo Finance daily bars; delayed/coverage-dependent"
+    payload = _build_payload(rows, universe, source)
     with _MOVERS_LOCK:
-        _MOVERS_CACHE.update(at=time.time(), payload=payload)
+        _MOVERS_CACHE[cache_key]      = payload
+        _MOVERS_CACHE[f"at_{universe}"] = time.time()
     return {**payload, "cached": False}
