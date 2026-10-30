@@ -3,193 +3,359 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stock Scoring · Research Workspace</title>
+<meta name="color-scheme" content="light dark">
+<script>try{var t=localStorage.getItem('ss-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <style>
-/* ── tokens ──────────────────────────────────────────────────────────────── */
+/* ═══ DESIGN TOKENS ═══════════════════════════════════════════════════════════
+   Token names (--bg --card --soft --line --tx --mu --ac --up --dn --am …) are
+   referenced by the app's JavaScript, so they are kept. Do not rename.        */
 :root{
-  --bg:#f4f6fa;--card:#fff;--soft:#f1f4f9;--line:#e3e8ef;
-  --tx:#172033;--mu:#66738a;--ac:#2f5bea;--acs:#e8eefe;
-  --up:#0e9f6e;--ups:#e3f6ee;--dn:#e5484d;--dns:#fdeced;
-  --am:#c27c0e;--ams:#fff5de;
-  --sidebar:210px;
-  font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --bg:#f4f6fa;--card:#ffffff;--soft:#eff2f7;--soft2:#e6eaf2;--line:#e2e7ef;--line2:#cfd6e3;
+  --tx:#0e1626;--tx2:#3b4760;--mu:#6b778d;
+  --ac:#2f5bea;--ac-h:#2449c8;--acs:#e8eefe;--ac-tx:#fff;
+  --up:#0a9a68;--ups:#e1f6ee;--dn:#e03e45;--dns:#fdebec;--am:#b9770e;--ams:#fff3d9;
+  --overlay:rgba(244,246,250,.72);--bar:rgba(244,246,250,.82);
+  --sh1:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.05);
+  --sh2:0 12px 32px rgba(16,24,40,.14);
+  --side:#0f1729;--side-tx:#a9b4cc;--side-hi:#fff;--side-line:rgba(255,255,255,.08);--side-act:rgba(91,127,255,.18);
+  --r:12px;--r-sm:8px;--sidebar:244px;
+  --font:Inter,"SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  font-family:var(--font);color-scheme:light;
 }
-/* ── resets ──────────────────────────────────────────────────────────────── */
+:root[data-theme=dark]{
+  --bg:#0a0e17;--card:#111826;--soft:#172034;--soft2:#1e2a42;--line:#222e45;--line2:#304060;
+  --tx:#e7ecf5;--tx2:#bcc6da;--mu:#8592ab;
+  --ac:#6b8cff;--ac-h:#8aa4ff;--acs:rgba(107,140,255,.15);--ac-tx:#0a0e17;
+  --up:#2fd39b;--ups:rgba(47,211,155,.13);--dn:#ff7177;--dns:rgba(255,113,119,.13);--am:#f4b650;--ams:rgba(244,182,80,.14);
+  --overlay:rgba(10,14,23,.7);--bar:rgba(10,14,23,.82);
+  --sh1:0 0 0 rgba(0,0,0,0);--sh2:0 16px 40px rgba(0,0,0,.55);
+  --side:#0d1320;--side-line:rgba(255,255,255,.06);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme=light]){
+    --bg:#0a0e17;--card:#111826;--soft:#172034;--soft2:#1e2a42;--line:#222e45;--line2:#304060;
+    --tx:#e7ecf5;--tx2:#bcc6da;--mu:#8592ab;
+    --ac:#6b8cff;--ac-h:#8aa4ff;--acs:rgba(107,140,255,.15);--ac-tx:#0a0e17;
+    --up:#2fd39b;--ups:rgba(47,211,155,.13);--dn:#ff7177;--dns:rgba(255,113,119,.13);--am:#f4b650;--ams:rgba(244,182,80,.14);
+    --overlay:rgba(10,14,23,.7);--bar:rgba(10,14,23,.82);
+    --sh1:0 0 0 rgba(0,0,0,0);--sh2:0 16px 40px rgba(0,0,0,.55);--side:#0d1320;--side-line:rgba(255,255,255,.06);
+    color-scheme:dark;
+  }
+}
+
+/* ═══ BASE ═══════════════════════════════════════════════════════════════════ */
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font-size:14px;line-height:1.45}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--tx);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 14px;font-weight:600;transition:border-color .15s,background .15s}
-button:hover:not(:disabled){border-color:var(--ac)}
-button:disabled{opacity:.5;cursor:wait}
-.pri{background:var(--ac);border-color:var(--ac);color:#fff}
-.pri:hover:not(:disabled){background:#2449c8;border-color:#2449c8}
-.sm{padding:5px 11px;font-size:12px}
-input,select{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);outline:none}
-input:focus,select:focus{border-color:var(--ac)}
-a{color:var(--ac);text-decoration:none}
-/* ── layout ──────────────────────────────────────────────────────────────── */
-.app{display:grid;grid-template-columns:var(--sidebar) 1fr;min-height:100vh}
-aside{background:var(--card);border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
-.brand{padding:6px 10px 18px;display:flex;gap:10px;align-items:center}
-.logo{width:32px;height:32px;border-radius:10px;background:var(--ac);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;flex-shrink:0}
-.brand-name{font-weight:800;font-size:15px;line-height:1.2}
-.brand-sub{font-size:10px;color:var(--mu)}
-nav button{display:flex;gap:10px;align-items:center;width:100%;border:0;background:none;color:var(--mu);padding:9px 12px;text-align:left;border-radius:8px;font-size:13px;font-weight:500}
-nav button:hover{background:var(--soft);color:var(--tx)}
-nav button.on{background:var(--acs);color:var(--ac)}
-nav .sep{height:1px;background:var(--line);margin:6px 4px}
-.sidebar-footer{margin-top:auto;padding:10px 10px 4px;font-size:11px;color:var(--mu);line-height:1.6}
-main{min-width:0;padding:0 28px 48px}
-/* ── top header (sticky) ─────────────────────────────────────────────────── */
-.topbar{position:sticky;top:0;z-index:10;background:var(--bg);padding:14px 0 12px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line);margin-bottom:0}
-.pick{flex:1;max-width:420px}
-.chip{font-size:11px;padding:4px 10px;border-radius:99px;background:var(--soft);color:var(--mu);font-weight:600;white-space:nowrap}
-.chip.ok{background:var(--ups);color:var(--up)}.chip.err{background:var(--dns);color:var(--dn)}.chip.warn{background:var(--ams);color:var(--am)}
-/* ── pages ──────────────────────────────────────────────────────────────── */
-.page{display:none;padding-top:20px}.page.on{display:block}
-/* ── grids / cards ──────────────────────────────────────────────────────── */
-.grid{display:grid;gap:14px}
-.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
-.card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:16px}
-.mt{margin-top:14px}
-/* ── kpi cards ──────────────────────────────────────────────────────────── */
-.kpi-l{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
-.kpi-v{font-size:26px;font-weight:800;margin-top:5px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+::selection{background:var(--acs);color:var(--tx)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:10px;border:2px solid transparent;background-clip:padding-box}::-webkit-scrollbar-thumb:hover{background:var(--mu);background-clip:padding-box;border:2px solid transparent}::-webkit-scrollbar-track{background:transparent}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
+.ic{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic-sm{width:14px;height:14px}
+
+/* buttons */
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:var(--r-sm);padding:8px 14px;font-weight:600;font-size:13px;line-height:1.2;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .05s;box-shadow:var(--sh1)}
+button:hover:not(:disabled){border-color:var(--line2);background:var(--soft)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.pri{background:var(--ac);border-color:var(--ac);color:var(--ac-tx)}
+.pri:hover:not(:disabled){background:var(--ac-h);border-color:var(--ac-h)}
+.sm{padding:5px 10px;font-size:12px;border-radius:7px}
+.ghost{background:transparent;box-shadow:none}
+.icon-btn{width:34px;height:34px;padding:0;border-radius:9px}
+.lk{border:0;background:none;box-shadow:none;padding:0;color:var(--ac);font-weight:700;cursor:pointer;display:inline;font-family:var(--mono);font-size:12.5px;letter-spacing:.01em}
+.lk:hover:not(:disabled){background:none;text-decoration:underline;border:0}
+
+/* form controls */
+input,select{padding:8px 11px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);outline:none;font-size:13px;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:var(--mu)}
+input:focus,select:focus{border-color:var(--ac);box-shadow:0 0 0 3px var(--acs)}
+select{appearance:none;-webkit-appearance:none;padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238592ab' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;cursor:pointer}
+.field{width:100%;font-size:13px}
+input[type=checkbox],input[type=radio]{appearance:none;-webkit-appearance:none;width:16px;height:16px;padding:0;border:1.5px solid var(--line2);background:var(--card);flex:none;cursor:pointer;display:inline-grid;place-content:center;box-shadow:none;margin:0}
+input[type=checkbox]{border-radius:4.5px}input[type=radio]{border-radius:50%}
+input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
+input[type=checkbox]:checked::after{content:"";width:8px;height:4px;border-left:2px solid var(--ac-tx);border-bottom:2px solid var(--ac-tx);transform:rotate(-45deg) translate(1px,-1px)}
+input[type=radio]:checked{border-color:var(--ac);background:radial-gradient(var(--ac) 0 4px,transparent 5px)}
+
+/* ═══ LAYOUT ═════════════════════════════════════════════════════════════════ */
+.app{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+main{min-width:0;padding:0 32px 56px}
+.page{display:none;padding-top:26px;animation:fade .25s ease}.page.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* sidebar */
+aside{background:var(--side);color:var(--side-tx);padding:20px 14px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:2px;overflow-y:auto;border-right:1px solid var(--side-line)}
+.brand{padding:2px 8px 22px;display:flex;gap:11px;align-items:center}
+.logo{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#5b7fff,#2f5bea 60%,#1e3fc0);color:#fff;display:grid;place-items:center;flex:none;box-shadow:0 4px 14px rgba(47,91,234,.45)}
+.logo .ic{width:19px;height:19px;stroke-width:2.2}
+.brand-name{font-weight:800;font-size:15px;line-height:1.15;color:#fff;letter-spacing:-.2px}
+.brand-sub{font-size:11px;color:var(--side-tx);opacity:.75;margin-top:1px}
+.nav-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--side-tx);padding:16px 10px 6px;opacity:.55}
+nav{display:flex;flex-direction:column;gap:2px}
+nav button,.side-btn{display:flex;gap:11px;align-items:center;width:100%;border:0;background:none;color:var(--side-tx);padding:9px 11px;text-align:left;border-radius:9px;font-size:13.5px;font-weight:500;box-shadow:none;position:relative;justify-content:flex-start}
+nav button:hover:not(:disabled),.side-btn:hover:not(:disabled){background:rgba(255,255,255,.06);color:var(--side-hi);border:0}
+nav button.on{background:var(--side-act);color:var(--side-hi);font-weight:600}
+nav button.on::before{content:"";position:absolute;left:-14px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:#7e9bff}
+nav button.on .ic{color:#8fa8ff}
+.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--side-line);display:flex;flex-direction:column;gap:4px}
+.disclaimer{font-size:11px;line-height:1.55;color:var(--side-tx);opacity:.7;padding:8px 10px 2px}
+.disclaimer b{color:#fff;font-weight:600}
+
+/* topbar */
+.topbar{position:sticky;top:0;z-index:20;background:var(--bar);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px);padding:14px 0;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line);margin:0 -32px;padding-left:32px;padding-right:32px}
+.search{position:relative;flex:1;max-width:400px}
+.search .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--mu);pointer-events:none}
+.search kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font:600 10.5px var(--mono);color:var(--mu);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;background:var(--soft);pointer-events:none}
+.search input{padding-left:36px;padding-right:34px;height:36px;background:var(--soft);border-color:transparent}
+.search input:focus{background:var(--card)}
+.spacer{flex:1}
+.chip{font-size:11.5px;padding:4px 11px;border-radius:99px;background:var(--soft);color:var(--mu);font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line)}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55}
+.chip.ok{background:var(--ups);color:var(--up);border-color:transparent}.chip.ok::before{opacity:1;box-shadow:0 0 0 3px color-mix(in srgb,var(--up) 22%,transparent)}
+.chip.err{background:var(--dns);color:var(--dn);border-color:transparent}.chip.err::before{opacity:1}
+.chip.warn{background:var(--ams);color:var(--am);border-color:transparent}.chip.warn::before{opacity:1}
+#selChip{font-family:var(--mono);color:var(--tx2)}#selChip::before{display:none}
+.chip:has(.loading)::before{display:none}
+/* theme icons */
+#themeBtn .i-moon{display:none}
+:root[data-theme=dark] #themeBtn .i-sun{display:none}:root[data-theme=dark] #themeBtn .i-moon{display:block}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) #themeBtn .i-sun{display:none}:root:not([data-theme=light]) #themeBtn .i-moon{display:block}}
+
+/* page head */
+.page-head,.card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.page-head{margin-bottom:22px;flex-wrap:wrap}
+h1{font-size:24px;font-weight:800;letter-spacing:-.5px;margin:0 0 3px;line-height:1.2}
+h2{font-size:14.5px;font-weight:700;margin:0;letter-spacing:-.1px}
+h2.sec{font-size:17px;font-weight:800;letter-spacing:-.3px}
+.sub{font-size:12.5px;color:var(--mu);margin-top:3px}
+.eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mu)}
+.card-hd{margin-bottom:16px}
+.mt{margin-top:16px}.mt-lg{margin-top:28px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* grid + card */
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;min-width:0;box-shadow:var(--sh1)}
+.card.pad0{padding:0;overflow:hidden}
+.kpi{position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line2)}
+.kpi.k-up::after{background:var(--up)}.kpi.k-dn::after{background:var(--dn)}.kpi.k-ac::after{background:var(--ac)}.kpi.k-am::after{background:var(--am)}
+.kpi-l{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em}
+.kpi-v{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.7px;font-variant-numeric:tabular-nums;line-height:1.15}
 .up{color:var(--up)}.dn{color:var(--dn)}
-/* ── section titles ─────────────────────────────────────────────────────── */
-h1{font-size:22px;font-weight:800;letter-spacing:-.4px;margin:0 0 4px}
-h2{font-size:14px;font-weight:700;margin:0}
-.sub{font-size:12px;color:var(--mu);margin-top:2px}
-/* ── seg buttons ────────────────────────────────────────────────────────── */
-.seg{display:inline-flex;background:var(--soft);border-radius:8px;padding:3px;gap:2px}
-.seg button{border:0;background:none;padding:5px 12px;font-size:12px;border-radius:6px;color:var(--mu);font-weight:600}
-.seg button.on{background:var(--card);color:var(--ac);box-shadow:0 1px 3px #0002}
-/* ── table ──────────────────────────────────────────────────────────────── */
+
+/* segmented */
+.seg{display:inline-flex;background:var(--soft);border-radius:9px;padding:3px;gap:2px;flex-wrap:wrap;border:1px solid var(--line)}
+.seg button{border:0;background:none;padding:5px 12px;font-size:12px;border-radius:6px;color:var(--mu);font-weight:600;box-shadow:none}
+.seg button:hover:not(:disabled){background:none;color:var(--tx)}
+.seg button.on{background:var(--card);color:var(--ac);box-shadow:0 1px 3px rgba(16,24,40,.14),0 0 0 1px var(--line)}
+:root[data-theme=dark] .seg button.on{background:var(--soft2);color:#fff;box-shadow:0 0 0 1px var(--line2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .seg button.on{background:var(--soft2);color:#fff;box-shadow:0 0 0 1px var(--line2)}}
+.seg.wide button{padding:5px 14px}
+
+/* tables */
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu);padding:8px 10px;border-bottom:2px solid var(--line);text-align:left}
-td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
-tr:last-child td{border:0}
-tr:hover td{background:var(--soft)}
-.tw{overflow:auto;max-height:460px}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mu);padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;font-weight:700;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr{transition:background .12s}tbody tr:hover td{background:var(--soft)}
+.tw{overflow:auto;max-height:480px;margin:0 -8px}
 .num{text-align:right;font-variant-numeric:tabular-nums}
-/* ── badges ─────────────────────────────────────────────────────────────── */
-.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--soft);color:var(--mu)}
+th.num{text-align:right}
+.badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--soft);color:var(--mu);display:inline-block;white-space:nowrap;font-variant-numeric:tabular-nums}
 .b-up{background:var(--ups);color:var(--up)}.b-dn{background:var(--dns);color:var(--dn)}.b-am{background:var(--ams);color:var(--am)}
-/* ── lk (table link button) ─────────────────────────────────────────────── */
-.lk{border:0;background:none;padding:0;color:var(--ac);font-weight:700;cursor:pointer}
-/* ── breadth bar ────────────────────────────────────────────────────────── */
-.bbar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--soft)}
-/* ── sector heatmap ─────────────────────────────────────────────────────── */
-.heat-wrap{display:flex;flex-wrap:wrap;gap:6px}
-.htile{padding:7px 10px;border-radius:7px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;border:0;transition:opacity .15s;white-space:nowrap}
-.htile:hover{opacity:.85}
-/* ── progress bar ───────────────────────────────────────────────────────── */
-.progbar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden;margin:6px 0 4px}
-.progbar i{display:block;height:100%;background:var(--ac);border-radius:3px;transition:width .4s}
-/* ── financial chart canvas ─────────────────────────────────────────────── */
-#priceChart{background:var(--card);border-radius:8px;overflow:hidden}
-/* ── flag pills ─────────────────────────────────────────────────────────── */
+
+/* breadth + heatmap */
+.bbar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--soft);gap:2px}
+.bbar>div{transition:width .5s ease;border-radius:99px}
+.legend-row{display:flex;gap:18px;margin-top:10px;font-size:12px;color:var(--mu)}
+.legend-row i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px}
+.heat-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px}
+.htile{padding:9px 6px;border-radius:9px;font-size:11.5px;font-weight:700;color:var(--tx);cursor:pointer;border:0;box-shadow:none;transition:transform .12s,filter .15s;white-space:nowrap;line-height:1.35;font-variant-numeric:tabular-nums;display:block;width:100%;text-align:center;font-family:var(--mono)}
+.htile:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.12);border:0}
+
+/* progress */
+.progbar{height:8px;background:var(--soft);border-radius:99px;overflow:hidden;margin:10px 0 6px}
+.progbar i{display:block;height:100%;background:linear-gradient(90deg,var(--ac),#8aa4ff);border-radius:99px;transition:width .5s ease}
+.prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+#priceChart{border-radius:8px;overflow:hidden;min-height:120px}
+
+/* health flags */
 .flag{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:99px;font-size:12px;font-weight:600;margin:3px 4px 3px 0}
 .flag.good{background:var(--ups);color:var(--up)}.flag.bad{background:var(--dns);color:var(--dn)}.flag.warn{background:var(--ams);color:var(--am)}
-/* ── gaugebox (scoring) ─────────────────────────────────────────────────── */
-.gaugebox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.gaugebox h4{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu)}
-.tok-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.tok{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:11px}
-.tok small{display:block;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-.tok b{display:block;font-size:20px;margin-top:3px;font-variant-numeric:tabular-nums}
-.tok-hi b{color:var(--ac)}
-/* ── agent matrix ───────────────────────────────────────────────────────── */
+
+/* scoring: gaugebox + tokens */
+.gaugebox{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--sh1)}
+.gaugebox h4{margin:0;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--mu);font-weight:700}
+.tok-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.tok{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.tok small{display:block;color:var(--mu);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.tok b{display:block;font-size:21px;margin-top:3px;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+.tok-hi{background:var(--acs);border-color:transparent}.tok-hi b{color:var(--ac)}
+.bymodel{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.bymodel:empty{display:none}
+.bymodel .chip{background:var(--soft);color:var(--tx2);font-family:var(--mono);font-size:10.5px!important}.bymodel .chip::before{display:none}
+
+/* agent matrix */
 .matrix-wrap{overflow-x:auto}
-.agent-matrix{border-collapse:collapse;font-size:11px;white-space:nowrap}
-.agent-matrix th{padding:6px 8px;border-bottom:2px solid var(--line);text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu)}
-.agent-matrix td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:center}
-.agent-matrix .sym{font-weight:700;text-align:left;min-width:70px}
+.agent-matrix{border-collapse:separate;border-spacing:0;font-size:11.5px;white-space:nowrap;width:100%}
+.agent-matrix th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:center;font-size:10px}
+.agent-matrix td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:center;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.agent-matrix tbody tr{cursor:pointer}
+.agent-matrix .sym{font-weight:700;text-align:left;min-width:84px;position:sticky;left:0;background:var(--card);z-index:1;font-family:var(--mono);color:var(--ac)}
+.agent-matrix tbody tr:hover .sym{background:var(--soft)}
+.agent-matrix th:first-child{text-align:left}
 .c-ok{color:var(--up)}.c-err{color:var(--dn)}.c-wait{color:var(--am)}.c-skip{color:var(--mu)}
-/* ── data store table ───────────────────────────────────────────────────── */
-.ds-table{width:100%;border-collapse:collapse;font-size:12px}
-.ds-table th{padding:7px 10px;border-bottom:2px solid var(--line);text-align:left;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;background:var(--bg);z-index:1}
-.ds-table td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ds-table tr:hover td{background:var(--soft)}
-.ds-stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-size:11px}
-.ds-stat b{font-size:16px;display:block;font-variant-numeric:tabular-nums}
-/* ── watchlist panel ────────────────────────────────────────────────────── */
-#watchlistPanel{position:fixed;top:0;right:0;width:280px;background:var(--card);border-left:1px solid var(--line);height:100vh;overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;z-index:900;box-shadow:-4px 0 20px #0001;display:flex;flex-direction:column}
-/* ── tool health drawer ─────────────────────────────────────────────────── */
-#toolHealthDrawer{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:2px solid var(--ac);padding:14px 20px;z-index:1000;box-shadow:0 -4px 20px #0001}
-/* ── run mode toggle ────────────────────────────────────────────────────── */
-.run-mode-row{display:flex;gap:8px;align-items:center;margin:10px 0}
-/* ── score colors ───────────────────────────────────────────────────────── */
-.score-cell.positive{color:var(--up)}.score-cell.negative{color:var(--dn)}.score-cell.neutral{color:var(--mu)}
-.run-row.run-selected{border-left-color:var(--ac)!important;background:var(--acs)}
-/* ── stock list ─────────────────────────────────────────────────────────── */
-.stock-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer}
+.mx-key{display:flex;gap:14px;font-size:11px;color:var(--mu);margin-top:12px;flex-wrap:wrap}
+.mx-key span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:currentColor}
+
+/* data store */
+.ds-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.ds-table th{padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:1}
+.ds-table td{padding:8px 12px;vertical-align:top;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;margin-bottom:18px}
+.ds-stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 14px;box-shadow:var(--sh1)}
+.ds-stat small{font-size:10.5px;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;font-weight:700}
+.ds-stat b{font-size:20px;display:block;font-variant-numeric:tabular-nums;letter-spacing:-.4px;margin-top:1px}
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.prune{display:flex;gap:8px;align-items:center;padding:6px 8px 6px 12px;background:var(--card);border:1px solid var(--line);border-radius:11px}
+.prune .field{width:auto;padding-top:5px;padding-bottom:5px;border-color:transparent;background-color:var(--soft)}
+#pruneBtn{color:var(--dn)}
+#dataTableWrap{overflow:auto;max-height:calc(100vh - 360px);min-height:200px}
+
+/* watchlist panel */
+#watchlistPanel{position:fixed;top:0;right:0;width:340px;max-width:100vw;background:var(--card);border-left:1px solid var(--line);height:100vh;overflow-y:auto;transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);z-index:900;box-shadow:var(--sh2);display:flex;flex-direction:column}
+.wl-hd{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.wl-hd b{font-size:15px;display:flex;gap:9px;align-items:center}.wl-hd .ic{color:var(--am)}
+.wl-sec{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.wl-ft{padding:14px 18px;border-top:1px solid var(--line);margin-top:auto}
+#wlToggleBtn .ic{color:var(--am)}
+
+/* tool health drawer */
+#toolHealthDrawer{display:none;position:fixed;bottom:0;left:var(--sidebar);right:0;background:var(--card);border-top:1px solid var(--line2);padding:16px 32px 20px;z-index:1000;box-shadow:0 -14px 40px rgba(16,24,40,.16);max-height:60vh;overflow:auto;border-radius:16px 16px 0 0}
+.th-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.th-hd b{font-size:15px;display:flex;gap:9px;align-items:center}
+#toolHealthGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+#toolHealthGrid>div[style]{border-radius:10px!important;padding:11px 13px!important;background:var(--soft)!important}
+.th-legend{display:flex;gap:14px;font-size:11px;color:var(--mu)}
+.th-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+
+/* scoring page parts */
+.scoring-grid{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;align-items:start}
+.build{position:sticky;top:84px}
+.field-label{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin:16px 0 8px}
+.field-label:first-of-type{margin-top:0}
+.filters{display:flex;gap:8px;margin-bottom:8px}
+#stockList{max-height:272px;overflow-y:auto;margin:0 -6px 10px;padding:0 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stock-row{display:flex;align-items:center;gap:11px;padding:8px 8px;border-radius:8px;cursor:pointer;margin:2px 0}
 .stock-row:hover{background:var(--soft)}
-.stock-row input{width:auto;padding:0;border:none;background:transparent}
-.stock-name{font-weight:600;font-size:13px}
+.stock-row:has(input:checked){background:var(--acs)}
+.stock-name{font-weight:600;font-size:13px;line-height:1.25}
 .stock-meta{font-size:11px;color:var(--mu)}
-.ticker{margin-left:auto;font-size:11px;font-weight:700;font-family:monospace;color:var(--mu)}
-/* ── field ──────────────────────────────────────────────────────────────── */
-.field{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);width:100%;font-size:13px;outline:none}
-.field:focus{border-color:var(--ac)}
-/* ── hint / notice / empty ──────────────────────────────────────────────── */
-.hint{font-size:11px;color:var(--mu)}
-.notice{font-size:12px;padding:8px 12px;border-radius:8px;background:var(--ams);color:var(--am);display:none}
-.empty{padding:28px;text-align:center;color:var(--mu);font-size:13px}
-/* ── loading spinner ────────────────────────────────────────────────────── */
-.loading{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--ac);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
-@keyframes spin{to{transform:rotate(360deg)}}
-/* ── bymodel chips ──────────────────────────────────────────────────────── */
-.bymodel{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.bymodel .chip{background:var(--soft);color:var(--tx)}
-/* ── results table ──────────────────────────────────────────────────────── */
+.ticker{margin-left:auto;font-size:11px;font-weight:700;font-family:var(--mono);color:var(--mu)}
+.stock-row>span:nth-child(2){min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.controls{display:flex;flex-direction:column;gap:9px;font-size:13px}
+.controls label{display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--tx2);justify-content:space-between;flex-direction:row-reverse}
+.controls input[type=checkbox]{width:32px;height:19px;border-radius:99px;background:var(--soft2);border:0;position:relative;display:block;transition:background .2s}
+.controls input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;border:0;transform:none;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.controls input[type=checkbox]:checked{background:var(--ac)}
+.controls input[type=checkbox]:checked::after{transform:translateX(13px);border:0;width:15px;height:15px}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mode{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s;background:var(--card)}
+.mode:hover{border-color:var(--line2)}
+.mode:has(input:checked){border-color:var(--ac);background:var(--acs)}
+.mode input{margin-top:2px}
+.mode b{display:block;font-size:13px;line-height:1.2}.mode small{display:block;font-size:11px;color:var(--mu);margin-top:2px;line-height:1.3}
+.two{display:grid;grid-template-columns:1fr 104px;gap:8px}
+.notice{font-size:12.5px;padding:9px 12px;border-radius:9px;background:var(--ams);color:var(--am);display:none;margin-top:12px;font-weight:500}
+.run-actions{display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.run-actions .pri{flex:1;padding:11px 14px;font-size:14px}
+.selected-count{font-size:12px;color:var(--mu);white-space:nowrap;font-weight:600}
+.run-row{display:flex;gap:8px;align-items:center;padding:8px 10px!important;border-radius:8px;transition:background .12s}
+.run-row:hover{background:var(--soft)}
+.run-row.run-selected{border-left-color:var(--ac)!important;background:var(--acs)}
+#runList{max-height:200px;overflow-y:auto;margin:0 -6px}
+.score-cell{font-weight:700;font-family:var(--mono)}
+.score-cell.positive{color:var(--up)}.score-cell.negative{color:var(--dn)}.score-cell.neutral{color:var(--mu)}
 .table-wrap{overflow-x:auto}
-.reason{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* ── progress items ─────────────────────────────────────────────────────── */
-.prog-label{display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-top:2px}
-/* ── controls row ───────────────────────────────────────────────────────── */
-.controls{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}
-.controls label{display:flex;align-items:center;gap:6px;cursor:pointer}
-.run-actions{display:flex;align-items:center;gap:12px;margin-top:10px}
-.selected-count{font-size:12px;color:var(--mu)}
-/* ── section group label ─────────────────────────────────────────────────── */
-.nav-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);padding:12px 12px 4px;opacity:.7}
-/* ── responsive ─────────────────────────────────────────────────────────── */
+#metrics{gap:10px}
+.trace-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.trace-bar select{max-width:170px}
+#traceContent pre{font-family:var(--mono)!important}
+
+/* misc */
+.hint{font-size:11.5px;color:var(--mu)}
+.empty{padding:36px 20px;text-align:center;color:var(--mu);font-size:13px}
+.empty:not(:has(*)):not(:empty),.empty.hint{border:1px dashed var(--line2);border-radius:10px;margin:2px 0}
+.loading{display:inline-block;width:13px;height:13px;border:2px solid var(--line2);border-top-color:var(--ac);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#mktOverlay{background:var(--overlay)!important;backdrop-filter:blur(3px)}
+.footnote{font-size:11.5px;color:var(--mu);margin-top:22px;padding-top:14px;border-top:1px solid var(--line)}
+.page-foot{margin-top:12px;font-size:11.5px;color:var(--mu);display:flex;gap:7px;align-items:center}
+.page-foot .ic{width:13px;height:13px}
+#mDate{display:flex;align-items:center;flex-wrap:wrap;gap:2px}
+.uni-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+#niftySubSeg{overflow-x:auto;max-width:100%}
+.hl{font-family:var(--mono)}
+
+#glTable td{padding:8px 8px}#glTable td:first-child{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#glTable td .hint{display:inline-block;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+/* ═══ RESPONSIVE ═════════════════════════════════════════════════════════════ */
+@media(max-width:1180px){.scoring-grid{grid-template-columns:1fr}.build{position:static}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){
   .app{grid-template-columns:1fr}
-  aside{position:static;height:auto;flex-direction:row;overflow:auto;padding:8px}
-  .brand,.sidebar-footer,.nav-label{display:none}
-  nav{display:flex}
-  nav button{white-space:nowrap;padding:8px 12px}
-  .g4,.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}
-  main{padding:0 14px 30px}
+  aside{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:8px 10px;gap:6px;border-right:0;border-bottom:1px solid var(--side-line)}
+  .brand{padding:0 8px 0 2px}.brand-sub,.brand-name,.sidebar-footer,.nav-label,.disclaimer{display:none}
+  nav{flex-direction:row}nav button{white-space:nowrap;padding:8px 12px;width:auto}nav button.on::before{display:none}
+  .topbar{top:52px;margin:0 -16px;padding-left:16px;padding-right:16px;flex-wrap:wrap}
+  main{padding:0 16px 40px}
+  .g3,.g2{grid-template-columns:1fr}.g3>.card[style]{grid-column:auto!important}
+  #toolHealthDrawer{left:0;padding:16px}
+  .tok-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
-@media(max-width:560px){.g4,.g3{grid-template-columns:1fr}}
+@media(max-width:560px){.g4{grid-template-columns:1fr 1fr}.kpi-v{font-size:22px}h1{font-size:20px}.search{max-width:none;flex-basis:100%}#watchlistPanel{width:100vw}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></symbol>
+  <symbol id="i-candle" viewBox="0 0 24 24"><path d="M7 3v3M7 18v3M17 3v5M17 20v1"/><rect x="5" y="6" width="4" height="12" rx="1"/><rect x="15" y="8" width="4" height="12" rx="1"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0V7zM12 17v5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-3M4 5v4h4M4 13a8 8 0 0 0 14.9 3M20 19v-4h-4"/></symbol>
+</svg>
 <div class="app">
 
 <!-- ═══════════════════════════════════════ SIDEBAR ══════════════════════ -->
 <aside>
   <div class="brand">
-    <div class="logo">↗</div>
+    <div class="logo"><svg class="ic"><use href="#i-trend"/></svg></div>
     <div><div class="brand-name">Stock Scoring</div><div class="brand-sub">Research workspace</div></div>
   </div>
   <nav id="nav">
     <div class="nav-label">Browse</div>
-    <button data-p="market">📊 Market</button>
-    <button data-p="stock">📈 Stock</button>
-    <div class="sep"></div>
+    <button data-p="market"><svg class="ic"><use href="#i-trend"/></svg>Market</button>
+    <button data-p="stock"><svg class="ic"><use href="#i-candle"/></svg>Stock</button>
     <div class="nav-label">Analysis</div>
-    <button data-p="scoring" class="on">⚙ Scoring</button>
-    <div class="sep"></div>
+    <button data-p="scoring" class="on"><svg class="ic"><use href="#i-pulse"/></svg>Scoring</button>
     <div class="nav-label">Storage</div>
-    <button data-p="data">🗄 Data Store</button>
+    <button data-p="data"><svg class="ic"><use href="#i-db"/></svg>Data Store</button>
   </nav>
   <div class="sidebar-footer">
-    Research &amp; simulation only.<br>No live orders are placed.<br>
-    <a href="#" onclick="toggleToolHealth()" style="font-size:11px">🔌 Tool Health</a>
+    <button class="side-btn" onclick="toggleToolHealth()"><svg class="ic"><use href="#i-plug"/></svg>Tool Health</button>
+    <div class="disclaimer"><b>Research &amp; simulation only.</b><br>No live orders are placed.</div>
   </div>
 </aside>
 
@@ -198,32 +364,39 @@ tr:hover td{background:var(--soft)}
 
 <!-- sticky top bar: stock search + status chips -->
 <div class="topbar">
-  <input class="pick field" id="pick" list="syms" placeholder="Search symbol…" style="max-width:340px" aria-label="Stock search">
+  <div class="search">
+    <svg class="ic"><use href="#i-search"/></svg>
+    <input class="pick field" id="pick" list="syms" placeholder="Search symbol or company…" aria-label="Stock search" autocomplete="off">
+    <kbd>/</kbd>
+  </div>
   <datalist id="syms"></datalist>
-  <span class="chip" id="selChip">—</span>
-  <span style="flex:1"></span>
+  <span class="chip" id="selChip">No symbol</span>
+  <span class="spacer"></span>
   <span class="chip" id="apiStatus"><span class="loading"></span>API…</span>
   <span class="chip" id="fyChip">FYERS…</span>
-  <button class="sm" id="wlToggleBtn" onclick="toggleWatchlist()" title="Watchlists" style="font-size:13px">⭐ Lists</button>
+  <button class="sm" id="wlToggleBtn" onclick="toggleWatchlist()" title="Watchlists"><svg class="ic ic-sm"><use href="#i-star"/></svg>Lists</button>
+  <button class="icon-btn" id="themeBtn" title="Toggle light / dark theme" aria-label="Toggle theme">
+    <svg class="ic i-sun"><use href="#i-sun"/></svg><svg class="ic i-moon"><use href="#i-moon"/></svg>
+  </button>
 </div>
 
 <!-- ══════════════════════════════════════ PAGE: MARKET ═════════════════ -->
 <section id="p-market" class="page">
-  <div class="card-hd" style="margin-top:4px">
+  <div class="page-head">
     <div>
       <h1>Market overview</h1>
       <div class="sub" id="mDate">Daily movers · Yahoo Finance bars</div>
       <div id="mFreshnessRow" style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <div class="row">
       <button class="pri sm" id="mRefresh" onclick="loadMarket(true)">↻ Refresh</button>
     </div>
   </div>
   <!-- Universe switcher -->
-  <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+  <div class="uni-bar">
     <div class="seg" id="uniTypeSeg">
-      <button data-u="financial" class="on" onclick="switchUniType('financial')">🏦 Financial stocks</button>
-      <button data-u="nifty" onclick="switchUniType('nifty')">📊 Nifty indices</button>
+      <button data-u="financial" class="on" onclick="switchUniType('financial')">Financial stocks</button>
+      <button data-u="nifty" onclick="switchUniType('nifty')">Nifty indices</button>
     </div>
     <div id="niftySubSeg" style="display:none;align-items:center;gap:8px">
       <div class="seg" id="niftyIndexSeg">
@@ -240,14 +413,15 @@ tr:hover td{background:var(--soft)}
     </div>
   </div>
   <div class="grid g4">
-    <div class="card"><div class="kpi-l">Advancers</div><div class="kpi-v up" id="kAdv">—</div></div>
-    <div class="card"><div class="kpi-l">Decliners</div><div class="kpi-v dn" id="kDec">—</div></div>
-    <div class="card"><div class="kpi-l">Median change</div><div class="kpi-v" id="kMed">—</div></div>
-    <div class="card"><div class="kpi-l">Market mood</div><div class="kpi-v" id="kMood">—</div></div>
+    <div class="card kpi k-up"><div class="kpi-l">Advancers</div><div class="kpi-v up" id="kAdv">—</div></div>
+    <div class="card kpi k-dn"><div class="kpi-l">Decliners</div><div class="kpi-v dn" id="kDec">—</div></div>
+    <div class="card kpi k-ac"><div class="kpi-l">Median change</div><div class="kpi-v" id="kMed">—</div></div>
+    <div class="card kpi k-am"><div class="kpi-l">Market mood</div><div class="kpi-v" id="kMood">—</div></div>
   </div>
   <div class="card mt">
-    <div class="card-hd"><div><h2>Market breadth</h2><div class="sub">Advancers vs decliners across universe</div></div></div>
+    <div class="card-hd" style="margin-bottom:14px"><div><h2>Market breadth</h2><div class="sub">Advancers vs decliners across universe</div></div></div>
     <div class="bbar" id="breadthBar"></div>
+    <div class="legend-row"><span><i style="background:var(--up)"></i>Advancers</span><span><i style="background:var(--dn)"></i>Decliners</span><span><i style="background:var(--soft2)"></i>Unchanged</span></div>
   </div>
   <div class="grid g2 mt">
     <div class="card">
@@ -267,7 +441,7 @@ tr:hover td{background:var(--soft)}
   </div>
   <div class="card mt">
     <div class="card-hd">
-      <h2>Sector heatmap</h2>
+      <div><h2>Sector heatmap</h2><div class="sub">Tile colour scales with day change · click a tile to open the stock</div></div>
       <div class="seg" id="hmSeg">
         <button data-m="all" class="on">All</button>
         <button data-m="bank_private">Pvt Banks</button>
@@ -280,7 +454,7 @@ tr:hover td{background:var(--soft)}
   </div>
   <div class="card mt">
     <div class="card-hd">
-      <h2>Breakouts &amp; momentum</h2>
+      <div><h2>Breakouts &amp; momentum</h2><div class="sub">Multi-day scans across the universe</div></div>
       <div class="seg" id="momSeg">
         <button data-m="three_day_winners" class="on">3-day winners</button>
         <button data-m="consistent_losers">Consistent losers</button>
@@ -289,30 +463,31 @@ tr:hover td{background:var(--soft)}
     </div>
     <div class="tw"><div id="momTable"><div class="empty">Loading…</div></div></div>
   </div>
-  <div class="hint mt" id="mSrc"></div>
+  <div class="footnote" id="mSrc"></div>
 </section>
 
 <!-- ══════════════════════════════════════ PAGE: STOCK ══════════════════ -->
 <section id="p-stock" class="page">
-  <div class="card-hd" style="margin-top:4px">
+  <div class="page-head">
     <div>
-      <h1 id="sTitle">Select a stock</h1>
+      <div class="eyebrow">Stock detail</div>
+      <h1 id="sTitle" class="hl">Select a stock</h1>
       <div class="sub" id="sSub">Enter a symbol in the search bar above</div>
     </div>
-    <button class="pri" onclick="nav('scoring')" title="Run AI scoring on this stock">⚙ Score this stock →</button>
+    <button class="pri" onclick="nav('scoring')" title="Run AI scoring on this stock">Score this stock →</button>
   </div>
   <!-- KPI row -->
   <div class="grid g4">
-    <div class="card"><div class="kpi-l">Last close</div><div class="kpi-v" id="sLast">—</div></div>
-    <div class="card"><div class="kpi-l">Day change</div><div class="kpi-v" id="sChg">—</div></div>
-    <div class="card"><div class="kpi-l">Period range</div><div class="kpi-v" id="sRng" style="font-size:18px">—</div></div>
-    <div class="card"><div class="kpi-l">Volume</div><div class="kpi-v" id="sVol">—</div></div>
+    <div class="card kpi k-ac"><div class="kpi-l">Last close</div><div class="kpi-v" id="sLast">—</div></div>
+    <div class="card kpi"><div class="kpi-l">Day change</div><div class="kpi-v" id="sChg">—</div></div>
+    <div class="card kpi"><div class="kpi-l">Period range</div><div class="kpi-v" id="sRng" style="font-size:19px;margin-top:10px">—</div></div>
+    <div class="card kpi"><div class="kpi-l">Volume</div><div class="kpi-v" id="sVol">—</div></div>
   </div>
   <!-- price chart -->
   <div class="card mt">
     <div class="card-hd">
       <div><h2>Price &amp; volume</h2><div class="sub" id="pSrc">Yahoo Finance daily bars; delayed/coverage-dependent</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="row">
         <div class="seg" id="perSeg">
           <button data-v="1mo">1M</button><button data-v="3mo">3M</button>
           <button data-v="6mo" class="on">6M</button><button data-v="1y">1Y</button>
@@ -325,10 +500,12 @@ tr:hover td{background:var(--soft)}
       </div>
     </div>
     <div id="priceChart"><div class="empty">Select a symbol above to load the chart.</div></div>
+    <div class="legend-row"><span><i style="background:#f39c12"></i>EMA 20</span><span><i style="background:#3498db"></i>EMA 50</span><span><i style="background:#9b59b6"></i>EMA 200</span></div>
   </div>
   <!-- financial health -->
-  <div class="card-hd mt"><h1 style="margin:0">Financial health</h1>
-    <div style="display:flex;gap:8px">
+  <div class="card-hd mt-lg" style="align-items:center">
+    <div><h2 class="sec">Financial health</h2><div class="hint" id="fSt" style="margin-top:2px"></div></div>
+    <div class="row">
       <div class="seg" id="frSeg">
         <button data-v="quarterly" class="on">Quarterly</button>
         <button data-v="annual">Annual</button>
@@ -336,7 +513,6 @@ tr:hover td{background:var(--soft)}
       <button class="sm" id="fRefresh" onclick="loadStock(currentSym,true)">↻ Refresh</button>
     </div>
   </div>
-  <div class="hint" id="fSt"></div>
   <div class="grid g3">
     <div class="card">
       <h2>Health score</h2><div class="sub">Rule-based flags</div>
@@ -351,48 +527,58 @@ tr:hover td{background:var(--soft)}
 </section>
 
 <!-- ══════════════════════════════════════ PAGE: SCORING ════════════════ -->
-<section id="p-scoring" class="page">
-<div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start">
+<section id="p-scoring" class="page on">
+<div class="page-head">
+  <div><h1>Scoring</h1><div class="sub">Select stocks, run the 10-agent pipeline, and review ranked results with full agent traces.</div></div>
+</div>
+<div class="scoring-grid">
 
 <!-- left: build panel -->
-<div>
+<div class="build">
   <div class="card">
-    <div class="card-hd"><h2>Build a run</h2></div>
-    <div style="margin-bottom:8px;display:flex;gap:6px">
-      <select id="sectorFilter" class="field" style="font-size:12px" onchange="filterStocks()">
+    <div class="card-hd" style="margin-bottom:14px"><h2>Build a run</h2><span class="selected-count" id="selectionCountHd"></span></div>
+
+    <div class="field-label">Universe</div>
+    <div class="filters">
+      <select id="sectorFilter" class="field" onchange="filterStocks()">
         <option value="">All sectors</option>
-        <optgroup label="🏦 Banks"><option value="bank_private">Private Banks</option><option value="bank_psu">PSU Banks</option><option value="bank_small_finance">Small Finance Banks</option></optgroup>
-        <optgroup label="🛡 Insurance"><option value="insurance_life">Life Insurance</option><option value="insurance_general">General Insurance</option></optgroup>
-        <optgroup label="💳 NBFC + HFC"><option value="nbfc">NBFC</option><option value="hfc">HFC</option></optgroup>
+        <optgroup label="Banks"><option value="bank_private">Private Banks</option><option value="bank_psu">PSU Banks</option><option value="bank_small_finance">Small Finance Banks</option></optgroup>
+        <optgroup label="Insurance"><option value="insurance_life">Life Insurance</option><option value="insurance_general">General Insurance</option></optgroup>
+        <optgroup label="NBFC + HFC"><option value="nbfc">NBFC</option><option value="hfc">HFC</option></optgroup>
         <optgroup label="Other"><option value="amc_wealth">AMC / Wealth</option></optgroup>
       </select>
-      <input id="symSearch" class="field" placeholder="Filter symbol…" style="font-size:12px;flex:1" oninput="filterStocks()">
+      <input id="symSearch" class="field" placeholder="Filter symbol…" oninput="filterStocks()">
     </div>
-    <div id="stockList" style="max-height:260px;overflow-y:auto;margin-bottom:8px"></div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <button class="sm" onclick="selectAll(true)" style="font-size:11px">Select all</button>
-      <button class="sm" onclick="selectAll(false)" style="font-size:11px">Clear</button>
+    <div id="stockList"></div>
+    <div class="row" style="margin-bottom:2px">
+      <button class="sm" onclick="selectAll(true)">Select all</button>
+      <button class="sm ghost" onclick="selectAll(false)">Clear</button>
     </div>
+
+    <div class="field-label">Options</div>
     <div class="controls">
-      <label><input type="checkbox" id="stub"> Demo mode</label>
-      <label><input type="checkbox" id="refresh" checked> Refresh data</label>
-      <label><input type="checkbox" id="forceRefresh"> Force refresh</label>
+      <label><input type="checkbox" id="stub"><span>Demo mode <span class="hint">· fake LLM</span></span></label>
+      <label><input type="checkbox" id="refresh" checked><span>Refresh data</span></label>
+      <label><input type="checkbox" id="forceRefresh"><span>Force refresh <span class="hint">· ignore cache</span></span></label>
     </div>
-    <div class="run-mode-row">
-      <span class="hint">Run mode:</span>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="radio" name="runMode" value="bulk" checked> ⚡ Bulk</label>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="radio" name="runMode" value="deep_dive"> 🔬 Deep dive</label>
+
+    <div class="field-label">Run mode</div>
+    <div class="modes">
+      <label class="mode"><input type="radio" name="runMode" value="bulk" checked><span><b>⚡ Bulk</b><small>Fast, one model</small></span></label>
+      <label class="mode"><input type="radio" name="runMode" value="deep_dive"><span><b>🔬 Deep dive</b><small>Mixed models</small></span></label>
     </div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <select id="modelSelect" class="field" style="font-size:12px;flex:1"><option value="">Default model</option></select>
-      <select id="timeoutSelect" class="field" style="font-size:12px;width:90px">
+
+    <div class="field-label">Model &amp; timeout</div>
+    <div class="two">
+      <select id="modelSelect" class="field"><option value="">Default model</option></select>
+      <select id="timeoutSelect" class="field">
         <option value="300">5 min</option><option value="600" selected>10 min</option><option value="900">15 min</option><option value="1800">30 min</option>
       </select>
     </div>
     <div class="notice" id="notice"></div>
     <div class="run-actions">
       <span class="selected-count" id="selectionCount">0 stocks</span>
-      <button id="startRun" class="pri" style="flex:1">▶ Start scoring run</button>
+      <button id="startRun" class="pri">▶ Start scoring run</button>
     </div>
   </div>
 </div>
@@ -417,43 +603,44 @@ tr:hover td{background:var(--soft)}
     <div class="bymodel" id="byModel"></div>
   </div>
   <div class="card mt">
-    <div class="card-hd">
-      <h2>Runs</h2>
-      <button class="sm" onclick="loadRuns()">↻</button>
+    <div class="card-hd" style="align-items:center">
+      <div><h2>Runs</h2><div class="sub">Most recent 20 · click to load</div></div>
+      <button class="sm" onclick="loadRuns()" title="Reload runs">↻ Reload</button>
     </div>
-    <div id="runList" style="max-height:180px;overflow-y:auto"></div>
+    <div id="runList"></div>
   </div>
   <div class="card mt">
     <div class="card-hd">
-      <h2>Agent matrix</h2>
-      <div id="matrixMeta" class="hint"></div>
+      <div><h2>Agent matrix</h2><div id="matrixMeta" class="sub">Per-agent score for every stock</div></div>
     </div>
     <div class="matrix-wrap"><div id="agentMatrix"><div class="empty hint">Run a scoring to see the agent matrix.</div></div></div>
+    <div class="mx-key"><span class="c-ok">OK</span><span class="c-wait">Pending</span><span class="c-err">Error</span><span class="c-skip">Unavailable</span></div>
   </div>
   <div class="card mt" id="resultsCard" style="display:none">
-    <div class="card-hd">
-      <h2>Ranked stocks</h2>
-      <div style="display:flex;gap:8px">
+    <div class="card-hd" style="align-items:center">
+      <div><h2>Ranked stocks</h2><div class="sub">Decision Maker output, sorted by score</div></div>
+      <div class="row">
         <div class="seg" id="resTab">
           <button data-t="table" class="on">Table</button>
           <button data-t="traces">Traces</button>
         </div>
       </div>
     </div>
-    <div id="metrics" style="display:none;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px"></div>
+    <div id="metrics" style="display:none;grid-template-columns:repeat(4,1fr);margin-bottom:12px"></div>
     <div id="resultsTable"><div class="empty">No results yet.</div></div>
     <div id="tracePanel" style="display:none">
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <select id="traceSymbol" class="field" style="max-width:160px"><option value="">Select symbol</option></select>
+      <div class="trace-bar">
+        <select id="traceSymbol" class="field"><option value="">Select symbol</option></select>
         <button class="sm" id="loadTraces" disabled>Load traces</button>
         <button class="sm" id="showChart" disabled title="Interactive chart">📊 Chart</button>
-        <button class="sm" id="exportMd" disabled>Export .md</button>
-        <button class="sm" id="exportJson" disabled>Export .json</button>
+        <span class="spacer"></span>
+        <button class="sm" id="exportMd" disabled>⬇ Export .md</button>
+        <button class="sm" id="exportJson" disabled>⬇ Export .json</button>
       </div>
       <div id="traceContent"></div>
     </div>
   </div>
-  <div class="hint" style="margin-top:8px">Research only · no orders placed</div>
+  <div class="page-foot"><svg class="ic"><use href="#i-shield"/></svg>Research only · no orders placed</div>
 </div>
 
 </div><!-- /scoring grid -->
@@ -461,40 +648,45 @@ tr:hover td{background:var(--soft)}
 
 <!-- ══════════════════════════════════════ PAGE: DATA STORE ═════════════ -->
 <section id="p-data" class="page">
-  <div class="card-hd"><h1>Data Store</h1>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span class="hint">Prune:</span>
-      <select id="pruneNewsDays" class="field" style="width:90px;font-size:11px">
+  <div class="page-head" style="align-items:center">
+    <div><h1>Data Store</h1><div class="sub">Browse every SQLite table the pipeline writes to.</div></div>
+    <div class="prune">
+      <span class="eyebrow">Prune</span>
+      <select id="pruneNewsDays" class="field">
         <option value="30">30d news</option><option value="60">60d</option><option value="90" selected>90d</option>
       </select>
-      <select id="pruneRunsKeep" class="field" style="width:110px;font-size:11px">
+      <select id="pruneRunsKeep" class="field">
         <option value="20">keep 20 runs</option><option value="50">50</option><option value="100" selected>100</option>
       </select>
       <button class="sm" id="pruneBtn" onclick="runPrune()">🗑 Prune</button>
     </div>
   </div>
-  <div id="dbStatsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
-  <!-- subtabs -->
-  <div class="seg" id="dataSeg" style="margin-bottom:14px">
-    <button data-t="fundamentals" class="on">📊 Quarterly</button>
-    <button data-t="news">📰 News</button>
-    <button data-t="events">📋 Events</button>
-    <button data-t="fii">💰 FII/DII</button>
-    <button data-t="oi">📈 OI</button>
-    <button data-t="runs">▶ Runs</button>
-    <button data-t="agentio">🤖 Agent I/O</button>
-  </div>
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <input id="dsSymbol" class="field" placeholder="Symbol…" style="width:110px;font-size:12px" oninput="loadDataTab()">
-    <input id="dsScope"  class="field" placeholder="Scope…"  style="width:160px;font-size:12px;display:none" oninput="loadDataTab()">
-    <input id="dsRunId"  class="field" placeholder="Run ID…" style="width:190px;font-size:12px;display:none" oninput="loadDataTab()">
-    <select id="dsDays" class="field" style="width:90px;font-size:12px" onchange="loadDataTab()">
-      <option value="7">7d</option><option value="30" selected>30d</option><option value="90">90d</option><option value="365">1y</option>
-    </select>
-    <span id="dsCount" class="hint" style="align-self:center"></span>
-  </div>
-  <div id="dataTableWrap" style="overflow-x:auto;max-height:calc(100vh - 280px);overflow-y:auto">
-    <div class="empty hint">Select a subtab.</div>
+  <div id="dbStatsBar" class="ds-stats"></div>
+  <div class="card pad0">
+    <div style="padding:14px 14px 0">
+      <div class="seg" id="dataSeg">
+        <button data-t="fundamentals" class="on">Quarterly</button>
+        <button data-t="news">News</button>
+        <button data-t="events">Events</button>
+        <button data-t="fii">FII/DII</button>
+        <button data-t="oi">OI</button>
+        <button data-t="runs">Runs</button>
+        <button data-t="agentio">Agent I/O</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input id="dsSymbol" class="field" placeholder="Symbol…" style="width:120px" oninput="loadDataTab()">
+      <input id="dsScope"  class="field" placeholder="Scope…"  style="width:160px;display:none" oninput="loadDataTab()">
+      <input id="dsRunId"  class="field" placeholder="Run ID…" style="width:200px;display:none" oninput="loadDataTab()">
+      <select id="dsDays" class="field" style="width:90px" onchange="loadDataTab()">
+        <option value="7">7d</option><option value="30" selected>30d</option><option value="90">90d</option><option value="365">1y</option>
+      </select>
+      <span class="spacer"></span>
+      <span id="dsCount" class="hint"></span>
+    </div>
+    <div id="dataTableWrap">
+      <div class="empty hint">Select a subtab.</div>
+    </div>
   </div>
 </section>
 
@@ -502,39 +694,44 @@ tr:hover td{background:var(--soft)}
 
 <!-- ══════════════════════════════════════ WATCHLIST PANEL ══════════════ -->
 <div id="watchlistPanel">
-  <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
-    <b style="font-size:13px">⭐ Watchlists</b>
-    <button class="sm" onclick="toggleWatchlist()">✕</button>
+  <div class="wl-hd">
+    <b><svg class="ic"><use href="#i-star"/></svg>Watchlists</b>
+    <button class="sm icon-btn ghost" onclick="toggleWatchlist()" aria-label="Close" style="width:30px;height:30px"><svg class="ic ic-sm"><use href="#i-x"/></svg></button>
   </div>
-  <div style="padding:10px 14px;border-bottom:1px solid var(--line)">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input id="wlNewName" class="field" placeholder="New list name…" style="flex:1;font-size:12px">
-      <button class="sm pri" onclick="createWatchlist()">+</button>
+  <div class="wl-sec">
+    <div class="eyebrow">Create</div>
+    <div class="row" style="flex-wrap:nowrap">
+      <input id="wlNewName" class="field" placeholder="New list name…" style="flex:1">
+      <button class="sm pri" onclick="createWatchlist()" style="padding:8px 14px">+ Add</button>
     </div>
-    <div style="display:flex;gap:6px">
-      <select id="wlActiveList" class="field" style="flex:1;font-size:12px"><option value="">— pick list —</option></select>
-      <button class="sm" onclick="addSelectedToWatchlist()" title="Add selected stocks">+ sel</button>
+    <div class="eyebrow" style="margin-top:6px">Active list</div>
+    <div class="row" style="flex-wrap:nowrap">
+      <select id="wlActiveList" class="field" style="flex:1"><option value="">— pick list —</option></select>
+      <button class="sm" onclick="addSelectedToWatchlist()" title="Add selected stocks" style="padding:8px 12px">+ Selected</button>
     </div>
   </div>
   <div id="wlContent" style="flex:1;overflow-y:auto;padding:4px 0"></div>
-  <div style="padding:10px 14px;border-top:1px solid var(--line)">
-    <button id="runWatchlist" style="width:100%;font-size:12px" disabled onclick="runFromWatchlist()">▶ Run selected list</button>
+  <div class="wl-ft">
+    <button id="runWatchlist" class="pri" style="width:100%;padding:10px" disabled onclick="runFromWatchlist()">▶ Run selected list</button>
   </div>
 </div>
 
 <!-- ══════════════════════════════════════ TOOL HEALTH DRAWER ═══════════ -->
 <div id="toolHealthDrawer">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <b>🔌 Tool Health</b>
-    <div style="display:flex;gap:8px">
+  <div class="th-hd">
+    <b><svg class="ic"><use href="#i-plug"/></svg>Tool Health</b>
+    <div class="row">
+      <div class="th-legend"><span><i style="background:#0e9f6e"></i>Healthy</span><span><i style="background:#c27c0e"></i>Degraded</span><span><i style="background:#e5484d"></i>Down</span></div>
       <button class="sm" onclick="loadToolHealth()">↻ Re-check</button>
       <button class="sm" onclick="toggleToolHealth()">✕ Hide</button>
     </div>
   </div>
-  <div id="toolHealthGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+  <div id="toolHealthGrid">
     <div class="hint">Loading…</div>
   </div>
 </div>
+
+</div><!-- /app -->
 
 <!-- ═══════════════════════════════════════ JAVASCRIPT ══════════════════ -->
 <script>
@@ -609,7 +806,7 @@ async function loadMarket(force=false){
   // ── Loading overlay ──────────────────────────────────────────────────────
   const overlay=document.createElement('div');
   overlay.id='mktOverlay';
-  overlay.style.cssText='position:absolute;inset:0;background:rgba(255,255,255,.65);backdrop-filter:blur(2px);z-index:50;display:flex;align-items:center;justify-content:center;border-radius:12px;gap:10px;font-size:13px;font-weight:600;color:var(--mu)';
+  overlay.style.cssText='position:absolute;inset:0;background:var(--overlay);backdrop-filter:blur(2px);z-index:50;display:flex;align-items:center;justify-content:center;border-radius:12px;gap:10px;font-size:13px;font-weight:600;color:var(--mu)';
   overlay.innerHTML='<span class="loading" style="width:18px;height:18px;border-width:3px"></span> Loading market data…';
   const mktSection=$('p-market');
   if(mktSection){mktSection.style.position='relative';mktSection.appendChild(overlay);}
@@ -833,11 +1030,11 @@ function renderCandleChart(rows){
   let lastM='';
   rows.forEach((r,i)=>{
     const m=r.date.slice(0,7);
-    if(m!==lastM){lastM=m;xlabels+=`<text x="${sx(i)}" y="${H-8}" text-anchor="middle" fill="#66738a" font-size="10">${m}</text>`;}
+    if(m!==lastM){lastM=m;xlabels+=`<text x="${sx(i)}" y="${H-8}" text-anchor="middle" fill="var(--mu)" font-size="10">${m}</text>`;}
   });
   // y-axis
   const nTicks=5;let yticks='';
-  for(let t=0;t<=nTicks;t++){const v=lo+(hi-lo)*t/nTicks;yticks+=`<text x="${pad.l-6}" y="${sy(v)+4}" text-anchor="end" fill="#66738a" font-size="10">₹${Math.round(v).toLocaleString('en-IN')}</text><line x1="${pad.l}" y1="${sy(v)}" x2="${W-pad.r}" y2="${sy(v)}" stroke="#e3e8ef" stroke-width="0.5"/>`;}
+  for(let t=0;t<=nTicks;t++){const v=lo+(hi-lo)*t/nTicks;yticks+=`<text x="${pad.l-6}" y="${sy(v)+4}" text-anchor="end" fill="var(--mu)" font-size="10">₹${Math.round(v).toLocaleString('en-IN')}</text><line x1="${pad.l}" y1="${sy(v)}" x2="${W-pad.r}" y2="${sy(v)}" stroke="var(--line)" stroke-width="0.5"/>`;}
   $('priceChart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${yticks}${emaLines}${candles}${xlabels}</svg>`;
 }
 // period & EMA toggles
@@ -1035,8 +1232,9 @@ function filterStocks(){
   const vis=allStocks.filter(s=>(!sec||s.sub_sector===sec)&&(!q||s.symbol.includes(q)||s.company_name.toUpperCase().includes(q)));
   $('stockList').innerHTML=vis.length?vis.map(x=>`<label class="stock-row"><input type="checkbox" data-symbol="${esc(x.symbol)}" ${selected.has(x.symbol)?'checked':''}><span><span class="stock-name">${esc(x.company_name||x.symbol)}</span><br><span class="stock-meta">${esc(x.sub_sector||'')}</span></span><span class="ticker">${esc(x.symbol)}</span></label>`).join(''):'<div class="empty hint">No stocks match.</div>';
   $('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`;
+  syncSelHd();
 }
-$('stockList').addEventListener('change',e=>{const b=e.target.closest('input[data-symbol]');if(!b)return;b.checked?selected.add(b.dataset.symbol):selected.delete(b.dataset.symbol);$('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`;});
+$('stockList').addEventListener('change',e=>{const b=e.target.closest('input[data-symbol]');if(!b)return;b.checked?selected.add(b.dataset.symbol):selected.delete(b.dataset.symbol);$('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`;syncSelHd();});
 function selectAll(v){allStocks.forEach(s=>v?selected.add(s.symbol):selected.delete(s.symbol));filterStocks();}
 
 async function loadUniverse(){
@@ -1142,7 +1340,7 @@ function quickViewSymbol(sym){
   if(activeRunId&&sym)$('loadTraces').click();
 }
 function renderResultsTable(d){
-  const results=d.results||[];
+  const results=Array.isArray(d)?d:(d.results||[]);
   $('resultsCard').style.display='';  // always visible when a run is selected
   if(!results.length){$('resultsTable').innerHTML='<div class="empty hint">No ranked results yet.</div>';return;}
   const grouped={};results.forEach(r=>{if(!grouped[r.symbol])grouped[r.symbol]={};grouped[r.symbol][r.agent]=r;});
@@ -1371,6 +1569,18 @@ async function loadToolHealth(){
    BOOT
 ═══════════════════════════════════════════════════════════════ */
 (async()=>{await Promise.all([checkHealth(),loadUniverse(),loadRuns(),loadModels()]);})();
+
+/* ── UI-only enhancements (no data logic) ─────────────────────────────────── */
+function syncSelHd(){const h=$('selectionCountHd');if(h)h.textContent=selected.size?`${selected.size} selected`:'';}
+(function(){
+  const root=document.documentElement;
+  const cur=()=>root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  $('themeBtn').addEventListener('click',()=>{const n=cur()==='dark'?'light':'dark';root.setAttribute('data-theme',n);try{localStorage.setItem('ss-theme',n)}catch(e){}});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='/'&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();$('pick').focus();}
+    if(e.key==='Escape'){if(_wlOpen)toggleWatchlist();if(_thOpen)toggleToolHealth();}
+  });
+})();
 </script>
 </body>
 </html>
