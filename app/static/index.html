@@ -209,7 +209,11 @@ tr:hover td{background:var(--soft)}
 <!-- ══════════════════════════════════════ PAGE: MARKET ═════════════════ -->
 <section id="p-market" class="page">
   <div class="card-hd" style="margin-top:4px">
-    <div><h1>Market overview</h1><div class="sub" id="mDate">Daily movers · Yahoo Finance bars</div></div>
+    <div>
+      <h1>Market overview</h1>
+      <div class="sub" id="mDate">Daily movers · Yahoo Finance bars</div>
+      <div id="mFreshnessRow" style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="pri sm" id="mRefresh" onclick="loadMarket(true)">↻ Refresh</button>
     </div>
@@ -250,7 +254,13 @@ tr:hover td{background:var(--soft)}
       <div id="glTable"><div class="empty">Loading…</div></div>
     </div>
     <div class="card">
-      <div class="card-hd"><div><h2>Highest volume</h2><div class="sub">Shares traded today</div></div></div>
+      <div class="card-hd">
+        <div><h2 id="volCardTitle">Highest volume</h2><div class="sub" id="volCardSub">Shares traded today</div></div>
+        <div class="seg" id="volOiSeg">
+          <button data-v="vol" class="on" onclick="switchVolOi('vol')">Volume</button>
+          <button data-v="oi" onclick="switchVolOi('oi')">OI Activity</button>
+        </div>
+      </div>
       <div id="volTable"><div class="empty">Loading…</div></div>
     </div>
   </div>
@@ -545,7 +555,10 @@ function nav(p){
   document.querySelectorAll('#nav button[data-p]').forEach(b=>b.classList.remove('on'));
   $(`p-${p}`).classList.add('on');
   document.querySelector(`#nav button[data-p="${p}"]`)?.classList.add('on');
-  if(p==='market'&&!_marketLoaded)loadMarket(false);
+  if(p==='market'){
+    const stale=Date.now()-_lastMarketFetch>5*60*1000;  // re-fetch if >5 min old
+    if(!_marketLoaded||stale)loadMarket(false);
+  }
   if(p==='data'){loadDbStats();loadDataTab();}
 }
 document.querySelectorAll('#nav button[data-p]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.p)));
@@ -566,7 +579,7 @@ function gotoStock(sym){
 /* ══════════════════════════════════════════════════════════════
    MARKET TAB
 ═══════════════════════════════════════════════════════════════ */
-let _marketData=null,_marketLoaded=false,_currentUniverse='financial',_currentNifty='nifty50';
+let _marketData=null,_marketLoaded=false,_currentUniverse='financial',_currentNifty='nifty500',_lastMarketFetch=0;
 
 function switchUniType(type){
   document.querySelectorAll('#uniTypeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.u===type));
@@ -586,10 +599,19 @@ function switchNiftyIndex(key){
   _marketLoaded=false; loadMarket(false);
 }
 async function loadMarket(force=false){
+  // ── Loading overlay ──────────────────────────────────────────────────────
+  const overlay=document.createElement('div');
+  overlay.id='mktOverlay';
+  overlay.style.cssText='position:absolute;inset:0;background:rgba(255,255,255,.65);backdrop-filter:blur(2px);z-index:50;display:flex;align-items:center;justify-content:center;border-radius:12px;gap:10px;font-size:13px;font-weight:600;color:var(--mu)';
+  overlay.innerHTML='<span class="loading" style="width:18px;height:18px;border-width:3px"></span> Loading market data…';
+  const mktSection=$('p-market');
+  if(mktSection){mktSection.style.position='relative';mktSection.appendChild(overlay);}
   $('mRefresh').disabled=true;$('mRefresh').innerHTML='<span class="loading"></span>';
   try{
-    const d=await api(`/api/market/movers?refresh=${force}&universe=${_currentUniverse}`);
-    _marketData=d;_marketLoaded=true;
+    const bust=force?`&_t=${Date.now()}`:'';
+    const d=await api(`/api/market/movers?refresh=${force}&universe=${_currentUniverse}${bust}`,
+                      {cache:'no-store'});
+    _marketData=d;_marketLoaded=true;_lastMarketFetch=Date.now();
     // update the hint after response
     if($('niftyNote')&&d.filtered_from==='nifty500'){
       $('niftyNote').textContent='✓ filtered from Nifty 500 cache — no re-download';
@@ -611,18 +633,42 @@ async function loadMarket(force=false){
     renderVolume(d.highest_volume||[]);
     renderHeatmap(d.rows||[]);
     renderMomentum('three_day_winners');
-    $('mSrc').textContent=d.source||'';
-    if(d.market_date)$('mDate').textContent=`As of ${d.market_date} · ${d.source||''}`;
-  }catch(e){$('mDate').textContent='Error: '+e.message;}
+    const isCached=d.cached||false;
+    const filteredFrom=d.filtered_from?` · filtered from ${d.filtered_from}`:'';
+    const fetchedNow=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const cachedBadge=isCached
+      ?`<span style="background:var(--ams);color:var(--am);font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:6px">CACHED${filteredFrom}</span>`
+      :`<span style="background:var(--ups);color:var(--up);font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:6px">LIVE · fetched ${fetchedNow}</span>`;
+    $('mDate').innerHTML=`${d.universe||''} · ${d.rows?.length||0} stocks · ${d.source||''}${cachedBadge}`;
+    if($('niftyNote')&&d.filtered_from==='nifty500'){
+      $('niftyNote').textContent='✓ filtered from Nifty 500 cache — instant';
+    }
+    updateFreshness();  // start the "X min ago" ticker
+  }catch(e){$('mDate').innerHTML=`<span style="color:var(--dn)">Error: ${esc(e.message)}</span>`;}
+  // Remove overlay
+  const ov=document.getElementById('mktOverlay');if(ov)ov.remove();
   $('mRefresh').disabled=false;$('mRefresh').textContent='↻ Refresh';
 }
 function renderGainersLosers(gainers,losers){
-  const rows=[...gainers.map(r=>({...r,_type:'g'})),...losers.map(r=>({...r,_type:'l'}))];
-  $('glTable').innerHTML=`<table><thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Change</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button> <span class="hint">${esc(r.company_name||'')}</span></td>
+  // Strict top-6 gainers + bottom-6 losers with no overlap between the two lists
+  const g6=[];const seenG=new Set();
+  for(const r of gainers){if(!seenG.has(r.symbol)){g6.push(r);seenG.add(r.symbol);}if(g6.length>=6)break;}
+  const l6=[];const seenL=new Set(g6.map(r=>r.symbol));
+  for(const r of losers){if(!seenL.has(r.symbol)){l6.push(r);seenL.add(r.symbol);}if(l6.length>=6)break;}
+  const row=r=>`<tr><td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button> <span class="hint" style="font-size:11px">${esc((r.company_name||'').split(' ').slice(0,3).join(' '))}</span></td>
     <td class="num">₹${Number(r.close||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
-    <td class="num"><span class="badge ${r.change_pct>0?'b-up':'b-dn'}">${r.change_pct>0?'+':''}${Number(r.change_pct||0).toFixed(2)}%</span></td></tr>`).join('')}
-  </tbody></table>`;
+    <td class="num"><span class="badge ${r.change_pct>0?'b-up':'b-dn'}">${r.change_pct>0?'+':''}${Number(r.change_pct||0).toFixed(2)}%</span></td></tr>`;
+  $('glTable').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--up);padding:6px 10px 4px;border-bottom:1px solid var(--line)">▲ Top gainers</div>
+        <table><tbody>${g6.length?g6.map(row).join(''):'<tr><td colspan="3" class="empty hint">No data</td></tr>'}</tbody></table>
+      </div>
+      <div style="border-left:1px solid var(--line)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dn);padding:6px 10px 4px;border-bottom:1px solid var(--line)">▼ Top losers</div>
+        <table><tbody>${l6.length?l6.map(row).join(''):'<tr><td colspan="3" class="empty hint">No data</td></tr>'}</tbody></table>
+      </div>
+    </div>`;
 }
 function renderVolume(rows){
   $('volTable').innerHTML=`<table><thead><tr><th>Stock</th><th class="num">Volume</th><th class="num">Change</th></tr></thead><tbody>
@@ -630,6 +676,47 @@ function renderVolume(rows){
     <td class="num">${fmt(r.volume)}</td>
     <td class="num"><span class="badge ${r.change_pct>0?'b-up':'b-dn'}">${r.change_pct>0?'+':''}${Number(r.change_pct||0).toFixed(2)}%</span></td></tr>`).join('')}
   </tbody></table>`;
+}
+
+let _volOiMode='vol';
+function switchVolOi(mode){
+  _volOiMode=mode;
+  document.querySelectorAll('#volOiSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===mode));
+  if(mode==='vol'){
+    $('volCardTitle').textContent='Highest volume';
+    $('volCardSub').textContent='Shares traded today';
+    if(_marketData)renderVolume(_marketData.highest_volume||[]);
+  }else{
+    $('volCardTitle').textContent='OI Activity';
+    $('volCardSub').textContent='Long buildup · Short covering · Short buildup · Long unwinding';
+    loadOiActivity();
+  }
+}
+
+async function loadOiActivity(){
+  $('volTable').innerHTML='<div class="empty hint"><span class="loading"></span> Loading OI data from snapshots…</div>';
+  try{
+    const d=await api('/api/market/oi-activity');
+    if(d.total_symbols===0){
+      $('volTable').innerHTML='<div class="empty hint">No OI snapshots yet — run a scoring to populate OI data, or check the Data Store → OI Snapshots tab.</div>';
+      return;
+    }
+    const actBadge=(a,c)=>`<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;background:${c==='green'?'var(--ups)':'var(--dns)'};color:${c==='green'?'var(--up)':'var(--dn)'}">${esc(a)}</span>`;
+    const rows=d.top_by_abs_oi_change||[];
+    $('volTable').innerHTML=`
+      <div class="hint" style="padding:6px 10px;border-bottom:1px solid var(--line);font-size:10px">${d.note}</div>
+      <table><thead><tr><th>Stock</th><th class="num">LTP</th><th class="num">Price Δ</th><th class="num">OI Δ%</th><th class="num">PCR</th><th>Activity</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr>
+        <td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button></td>
+        <td class="num">₹${Number(r.ltp||0).toFixed(1)}</td>
+        <td class="num"><span class="badge ${r.price_chg_pct>=0?'b-up':'b-dn'}">${r.price_chg_pct>=0?'+':''}${r.price_chg_pct.toFixed(2)}%</span></td>
+        <td class="num"><b>${r.oi_chg_pct>=0?'+':''}${r.oi_chg_pct.toFixed(1)}%</b></td>
+        <td class="num">${r.pcr!=null?Number(r.pcr).toFixed(2):'—'}</td>
+        <td>${actBadge(r.activity,r.activity_color)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div style="font-size:10px;color:var(--mu);padding:6px 10px">${d.total_symbols} symbols with 2+ snapshots · sorted by |OI Δ%|</div>`;
+  }catch(e){$('volTable').innerHTML=`<div class="empty hint">OI data unavailable: ${esc(e.message)}</div>`;}
 }
 let _hmFilter='all';
 function renderHeatmap(rows){
@@ -913,6 +1000,23 @@ function svgBarChart(title, labels, series){
     <h2 style="margin:0">${esc(title)}</h2>${badge}</div>
     ${svg}
     <div style="display:flex;gap:14px;margin-top:6px;flex-wrap:wrap">${legend}</div>`;
+}
+
+/* ── Freshness ticker ────────────────────────────────────────────────────── */
+let _freshnessTimer=null;
+function updateFreshness(){
+  clearInterval(_freshnessTimer);
+  function tick(){
+    if(!_lastMarketFetch||!$('mFreshnessRow'))return;
+    const sec=Math.round((Date.now()-_lastMarketFetch)/1000);
+    const min=Math.floor(sec/60),rem=sec%60;
+    const age=min>0?`${min}m ${rem}s ago`:`${sec}s ago`;
+    const stale=sec>300;
+    $('mFreshnessRow').innerHTML=`
+      <span style="font-size:11px;color:var(--mu)">Data fetched: <b style="color:${stale?'var(--dn)':'var(--tx)'}">${age}</b>${stale?' · <a href="#" onclick="loadMarket(true);return false" style="color:var(--ac)">refresh now</a>':''}</span>`;
+  }
+  tick();
+  _freshnessTimer=setInterval(tick,10000);  // update every 10s
 }
 
 /* ══════════════════════════════════════════════════════════════

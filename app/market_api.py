@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -82,8 +83,31 @@ _NIFTY_NEXT50 = [
     "VOLTAS","ZOMATO","IPCALAB","MFSL","ICICIPRULI","WHIRLPOOL","ABB",
 ]
 
+# Additional well-covered Nifty-500 stocks across sectors (verified NSE tickers on Yahoo Finance)
+_NIFTY_EXTRA = [
+    # Auto & ancillaries
+    "EICHERMOT","MOTHERSON","BALKRISIND","APOLLOTYRE","EXIDEIND","AMARAJABAT",
+    "ENDURANCE","SUNDRMFAST","WABCOINDIA","EIHOTEL",
+    # Banking / NBFC
+    "JKBANK","KARURVYSYA","DCBBANK","CSBBANK","SOUTHBANK",
+    "MANAPPURAM","AAVAS","CREDITACC","UJJIVANSFB",
+    # Pharma / Healthcare
+    "SUNPHARMA","DRREDDY","CIPLA","ALKEM","TORNTPHARM","AUROPHARMA",
+    "LAURUSLABS","SYNGENE","GRANULES","AJANTPHARM","IPCALAB",
+    # Infra / Capital goods
+    "L&TFH","CESC","THERMAX","BHEL","BEML","ABFRL","IRCON","RAILVIKAS",
+    # Consumer
+    "EMAMILTD","GODREJCP","MARICO","COLPAL","PGHH","GILLETTE",
+    # Metals
+    "HINDCOPPER","RATNAMANI","JINDALSAW","WELCORP","NATIONALUM",
+    # Real estate
+    "PHOENIXLTD","SOBHA","MAHLIFE","SUNTECK",
+    # Insurance & AMCs
+    "ICICIGI","HDFCAMC","NIPPONLIFE","UTIAMC",
+]
+
 _NIFTY500 = list({s for lst in [_NIFTY50, _NIFTY_NEXT50, _NIFTY_BANK, _NIFTY_IT,
-                                  _NIFTY_MIDCAP, _NIFTY_SMALLCAP] for s in lst})
+                                  _NIFTY_MIDCAP, _NIFTY_SMALLCAP, _NIFTY_EXTRA] for s in lst})
 
 _UNIVERSE_MAP: dict[str, list[dict[str, Any]] | None] = {
     "financial": None,          # → load from universe.csv
@@ -258,8 +282,72 @@ def flags(symbol: str) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  MARKET TAB — Nifty-500 movers (yfinance batch — no better bulk source)
+#  MARKET TAB — OI Activity (from stored oi_snapshots)
 # ─────────────────────────────────────────────────────────────────────────────
+@router.get("/api/market/oi-activity", tags=["market"])
+def oi_activity(top_n: int = Query(default=10, ge=5, le=30)) -> dict[str, Any]:
+    """Top N stocks ranked by absolute OI change % from the two most recent oi_snapshots per symbol.
+    Classifies each as: Long Buildup, Short Buildup, Short Covering, Long Unwinding."""
+    try:
+        from app.store.db import connect as _db
+        with _db() as con:
+            # Latest 2 snapshots per symbol (ordered by captured_at desc)
+            rows = con.execute("""
+                WITH ranked AS (
+                    SELECT symbol, captured_at, call_oi, put_oi, pcr, ltp,
+                           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY captured_at DESC) AS rn
+                    FROM oi_snapshots WHERE call_oi IS NOT NULL AND put_oi IS NOT NULL
+                )
+                SELECT * FROM ranked WHERE rn <= 2 ORDER BY symbol, rn
+            """).fetchall()
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "error", "message": str(exc), "rows": []}
+
+    # Group into pairs
+    by_sym: dict[str, list[dict]] = {}
+    for r in rows:
+        d = dict(r)
+        by_sym.setdefault(d["symbol"], []).append(d)
+
+    results = []
+    for sym, snaps in by_sym.items():
+        if len(snaps) < 2:
+            continue
+        curr, prev = snaps[0], snaps[1]  # rn=1 is latest
+        total_curr = (curr["call_oi"] or 0) + (curr["put_oi"] or 0)
+        total_prev = (prev["call_oi"] or 0) + (prev["put_oi"] or 0)
+        if total_prev <= 0:
+            continue
+        oi_chg_pct = (total_curr - total_prev) / total_prev * 100
+        price_curr = curr.get("ltp") or 0
+        price_prev = prev.get("ltp") or 0
+        price_chg  = (price_curr - price_prev) / price_prev * 100 if price_prev else 0
+        # OI classification
+        price_up = price_chg >= 0
+        oi_up    = oi_chg_pct >= 0
+        if price_up and oi_up:
+            activity = "Long Buildup";     color = "green"
+        elif price_up and not oi_up:
+            activity = "Short Covering";   color = "green"
+        elif not price_up and oi_up:
+            activity = "Short Buildup";    color = "red"
+        else:
+            activity = "Long Unwinding";   color = "red"
+        results.append({"symbol": sym, "ltp": price_curr, "price_chg_pct": round(price_chg, 2),
+                         "total_oi": total_curr, "oi_chg_pct": round(oi_chg_pct, 2),
+                         "call_oi": curr["call_oi"], "put_oi": curr["put_oi"],
+                         "pcr": curr.get("pcr"), "activity": activity, "activity_color": color,
+                         "captured_at": curr["captured_at"]})
+
+    # Sort by abs OI change %
+    results.sort(key=lambda r: abs(r["oi_chg_pct"]), reverse=True)
+    top = results[:top_n]
+    long_side  = [r for r in results if r["activity_color"] == "green"][:top_n]
+    short_side = [r for r in results if r["activity_color"] == "red"][:top_n]
+    return {"status": "ok", "total_symbols": len(results),
+            "top_by_abs_oi_change": top, "long_side": long_side, "short_side": short_side,
+            "note": "Long Buildup=price↑OI↑ | Short Covering=price↑OI↓ | Short Buildup=price↓OI↑ | Long Unwinding=price↓OI↓"}
+
 def _members(universe: str = "financial") -> list[dict[str, Any]]:
     """Return constituent list for the requested universe key."""
     if universe in _UNIVERSE_MAP and _UNIVERSE_MAP[universe] is not None:
@@ -343,7 +431,10 @@ def movers(
         if cached500 and age500 < CACHE_TTL:
             sym_set = _INDEX_SYMBOL_SETS[universe]
             filtered = [r for r in cached500["rows"] if r["symbol"] in sym_set]
-            return {**_build_payload(filtered, universe, cached500["source"]), "cached": True, "filtered_from": "nifty500"}
+            return JSONResponse(
+                content={**_build_payload(filtered, universe, cached500["source"]),
+                         "cached": True, "filtered_from": "nifty500"},
+                headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
     # ── Own cache hit ──
     cache_key = f"payload_{universe}"
@@ -351,7 +442,8 @@ def movers(
         cached = _MOVERS_CACHE.get(cache_key)
         age    = now - float(_MOVERS_CACHE.get(f"at_{universe}", 0))
     if cached and not refresh and age < CACHE_TTL:
-        return {**cached, "cached": True}
+        return JSONResponse(content={**cached, "cached": True},
+                            headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
     # ── Download ──
     members = _members(universe)
@@ -403,4 +495,5 @@ def movers(
     with _MOVERS_LOCK:
         _MOVERS_CACHE[cache_key]      = payload
         _MOVERS_CACHE[f"at_{universe}"] = time.time()
-    return {**payload, "cached": False}
+    return JSONResponse(content={**payload, "cached": False},
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})

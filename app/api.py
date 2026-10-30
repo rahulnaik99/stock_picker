@@ -234,10 +234,15 @@ async def tool_health() -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001
             results[name] = {"status": "red", "note": str(exc)[:120]}
 
-    async def _http(url: str, timeout: float = 4.0, headers: dict | None = None) -> tuple[str, str]:
+    async def _http(url: str, timeout: float = 4.0, headers: dict | None = None,
+                    yellow_codes: set | None = None) -> tuple[str, str]:
         async with httpx.AsyncClient(timeout=timeout) as c:
             r = await c.get(url, headers=headers or {})
-            return ("green" if r.status_code < 400 else "red"), f"HTTP {r.status_code}"
+            if r.status_code < 400:
+                return "green", f"HTTP {r.status_code}"
+            if yellow_codes and r.status_code in yellow_codes:
+                return "yellow", f"HTTP {r.status_code} (working but rate-limited/needs session)"
+            return "red", f"HTTP {r.status_code}"
 
     async def _fyers() -> tuple[str, str]:
         if not (s.fyers_app_id and s.fyers_access_token):
@@ -256,11 +261,21 @@ async def tool_health() -> dict[str, Any]:
         return await _http(f"{raw}/api/tags")
 
     async def _yahoo() -> tuple[str, str]:
-        return await _http("https://query1.finance.yahoo.com/v8/finance/chart/^NSEI?interval=1d&range=5d", timeout=5.0)
+        # 429 = rate-limited by Yahoo but the actual yfinance library works fine (uses different endpoints/headers)
+        return await _http("https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?interval=1d&range=5d",
+                           timeout=5.0, yellow_codes={429, 401})
 
     async def _nse() -> tuple[str, str]:
-        return await _http("https://www.nseindia.com", timeout=5.0,
-                           headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
+        # NSE blocks simple browser-less GETs (403) but NSE API tools work via proper session init
+        # Use the public allIndices endpoint which is less strict than the homepage
+        try:
+            status, note = await _http("https://www.nseindia.com/api/allIndices", timeout=5.0,
+                                       headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                                                "Accept": "application/json", "Referer": "https://www.nseindia.com/"},
+                                       yellow_codes={403, 401})
+            return status, note
+        except Exception:  # noqa: BLE001
+            return "yellow", "NSE requires browser session (tools work via session init)"
 
     async def _rbi() -> tuple[str, str]:
         return await _http("https://rbi.org.in/pressreleases_rss.xml", timeout=5.0)

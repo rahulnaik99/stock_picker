@@ -1,6 +1,6 @@
 # Stock Scoring Pipeline
 
-A local, offline-first AI-powered research tool for scoring Indian financial stocks (banks, NBFCs, insurance, AMCs). Runs entirely on your machine — no cloud API required for the LLM (Ollama).
+A local, offline-first AI-powered research tool for Indian financial stocks (banks, NBFCs, insurance, AMCs). Runs entirely on your machine — no cloud LLM API required.
 
 > **Research only. No orders are placed.**
 
@@ -8,12 +8,13 @@ A local, offline-first AI-powered research tool for scoring Indian financial sto
 
 ## What it does
 
-1. Pulls live data from NSE, FYERS, Yahoo Finance, RBI, FRED, and news sources
-2. Runs **10 specialist AI agents** concurrently per stock (fundamental, industry, technical, risk, promoter, catalyst, etc.)
-3. A **Decision Maker** reconciles all scores into a final verdict: `POTENTIAL_ENTRY`, `WAIT_FOR_SETUP`, or `AVOID`
-4. Displays a live agent matrix in the browser — watch each agent complete in real time
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for a full story-format explanation with diagrams.
+- Pulls live data from NSE, FYERS, Yahoo Finance, RBI, FRED, IndianAPI, and Google News
+- Runs **10 specialist AI agents** concurrently per stock (fundamental, industry, 8 technical specialists)
+- A **Decision Maker** reconciles all scores → `POTENTIAL_ENTRY`, `WAIT_FOR_SETUP`, or `AVOID`
+- **Market tab** — daily movers, heatmap, OI activity, breakouts across Financial/Nifty universes
+- **Stock tab** — FYERS-sourced candlestick chart, NSE XBRL financials, health score, valuation
+- **Scoring tab** — live agent matrix, ranked results, trace viewer, watchlists
+- **Data Store tab** — browse every SQLite table, prune old data
 
 ---
 
@@ -21,162 +22,227 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for a full story-format expla
 
 ### Prerequisites
 
-| Requirement | Notes |
+| | Notes |
 |---|---|
-| Python 3.11+ | Tested on macOS (M1 Air) |
+| Python 3.11+ | Tested on macOS M1 |
 | [Ollama](https://ollama.ai) | Local LLM server |
-| FYERS account | For live candles + option chain |
-| Git | For cloning |
+| FYERS account | Live candles + option chain |
 
-### 1. Clone and install
+### Install
 
 ```bash
-git clone https://github.com/rahulnaik99/stock_picker.git
+git clone https://github.com/rahulnaik99/stock_picker.git -b dev
 cd stock_picker
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Pull the default model
+### Pull the default model
 
 ```bash
 ollama pull nemotron-bolt-e4b-16k
+# Optional — for deep-dive mixed config:
+ollama pull qwen3:30b
+ollama pull nemotron-nano-4b-16k
 ```
 
-### 3. Configure environment
+### Configure
 
 ```bash
 cp .env.example .env
-# Edit .env — minimum required:
-#   FYERS_APP_ID=...
-#   FYERS_ACCESS_TOKEN=...   (generate with: python -m scripts.fyers_login)
+# Minimum required:
+FYERS_APP_ID=...
+FYERS_ACCESS_TOKEN=...   # generate: python -m scripts.fyers_login
+# Optional but recommended:
+INDIANAPI_KEY=sk-live-...   # premium financial news
+FRED_API_KEY=...            # US macro rates
 ```
 
-### 4. Start the server
+### Start
 
 ```bash
 uvicorn app.api:app --reload --port 8000
-```
-
-Open **http://localhost:8000** in your browser.
-
----
-
-## UI Overview
-
-```
-┌──────────────────────┬────────────────────────────────┐
-│  Build a scoring run │  Recent runs / live progress   │
-│  • Stock selector    │  • Agent matrix (live update)  │
-│  • LLM model picker  │  • Token usage + speed         │
-│  • ⚡ Bulk / 🔬 Deep  │  • Decision Maker verdict      │
-│  • Run button        │                                │
-├──────────────────────┴────────────────────────────────┤
-│  Ranked stocks table  (score · direction · completeness)│
-├───────────────────────────────────────────────────────┤
-│  Agent Trace Viewer  (prompts · raw LLM replies)       │
-│  📊 Interactive chart  (TradingView-style, zoomable)   │
-└───────────────────────────────────────────────────────┘
-            ⭐ Watchlists panel  (slide from right)
-            🔌 Tool Health drawer  (slide from bottom)
+# open http://localhost:8000
 ```
 
 ---
 
-## Run Modes
+## UI — Four tabs
 
-### ⚡ Bulk Scan
-Uses `nemotron-bolt-e4b-16k` for all agents. Single model stays resident in RAM — no swap overhead. Best for daily universe scans (all 98 stocks in ~15-20 min).
+```
+┌──────────────┬──────────────────────────────────────────────────────┐
+│ ↗ Stock      │ [topbar: symbol search · API · FYERS · ⭐ Lists]     │
+│   Scoring    ├──────────────────────────────────────────────────────┤
+│              │  📊 Market   movers · heatmap · OI activity          │
+│  ── Browse ──│  📈 Stock    chart · fundamentals · health           │
+│  📊 Market   │  ⚙  Scoring  run builder · agent matrix · results   │
+│  📈 Stock    │  🗄  Data     browse SQLite tables · prune           │
+│  ── Analysis─│                                                      │
+│  ⚙  Scoring  │  [⭐ Watchlists — slides from right]                │
+│  ── Storage ─│  [🔌 Tool Health — slides from bottom]              │
+│  🗄 Data     │                                                      │
+└──────────────┴──────────────────────────────────────────────────────┘
+```
 
-### 🔬 Deep Dive
-Uses the **mixed config** (`model_config.mixed.json`):
-- `qwen3-30b-a3b-16k` for Fundamental, Trader, Option Chain, Promoter Intel
-- `nemotron-bolt-e4b-16k` for Industry, Catalyst, Investment Trend, Decision Maker
-- `nemotron-nano-4b-16k` for Indicator, RS Agent, Quant Risk
+---
 
-Best for 1–5 stocks you're actively considering trading. Richer reasoning, specific number citations.
+## Market Tab — Universe Switcher
 
-**Requires** `OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_NUM_PARALLEL=1` for safe sequential model loading.
+| Option | Coverage |
+|---|---|
+| 🏦 Financial stocks | 98 NSE financials (our universe) |
+| 📊 Nifty 500 | 232 symbols across all Nifty indices |
+| Nifty 50 / Bank / IT / Small / Mid / Large Cap | Filtered instantly from Nifty 500 cache |
+
+**Nifty 500 is the superset.** Load it once — all sub-index views filter from the same cached batch (no re-download). Sub-index switching is instant.
+
+### OI Activity (Volume card → OI Activity tab)
+
+Reads stored `oi_snapshots`, compares latest two snapshots per symbol:
+
+| Badge | Signal |
+|---|---|
+| **Long Buildup** | Price ↑ + OI ↑ |
+| **Short Covering** | Price ↑ + OI ↓ |
+| **Short Buildup** | Price ↓ + OI ↑ |
+| **Long Unwinding** | Price ↓ + OI ↓ |
+
+---
+
+## Scoring — Run Modes
+
+| Mode | Models | Best for |
+|---|---|---|
+| ⚡ **Bulk scan** | `nemotron-bolt-e4b-16k` everywhere | Daily scan of all 98 stocks (~15 min) |
+| 🔬 **Deep dive** | qwen3 + bolt + nano (mixed) | 1–5 shortlisted stocks before trading |
+
+Switch with the radio buttons above the Run button. Deep Dive uses `model_config.mixed.json` for the run duration only — no restart needed.
+
+### Retry-once-then-skip
+
+- Every agent retries once on failure (2 s wait between attempts)
+- **Required agents** (fundamental, industry, indicator): both fail → stock skipped, others continue
+- **Optional agents**: both fail → error AgentResult, scoring continues with partial data
+
+---
+
+## Bug fixes applied (session history)
+
+| Bug | Fix |
+|---|---|
+| `quant_risk` beta = −0.15 for PSU bank | Date-aligned inner join on shared calendar dates; unreliable-beta guard (`\|corr\| ≥ 0.2`); `max_adjust=1.0` cap |
+| `nse_promoter_pledge` 404 every run | PSU banks short-circuit (GoI never pledges); dual endpoint fallback |
+| EPS split artifact (FY2024 EPS 84 → FY2025 EPS 19) | Split detection in `horizon_metrics`; pre-split quarters rescaled to current face value |
+| Browser swallowing ↻ Refresh silently | `Cache-Control: no-store` on all movers responses + `_t=<timestamp>` cache-busting parameter on force-refresh |
+| Duplicate entries in gainers/losers | Strict deduplication — symbol appears in exactly one column |
+| Tool health showing Yahoo 429 / NSE 403 as red | 429 = yellow (rate-limited, working); 403 = yellow (needs session, working) |
 
 ---
 
 ## Watchlists
 
-Create named lists of your favourite stocks (e.g. "PSU Banks", "NBFC Top 5", "My Longs"). Click the **⭐ Lists** tab on the right edge of the screen. Add stocks from any selection; run an entire watchlist with one click.
+Click **⭐ Lists** (top-right). Create named lists (e.g. "PSU Banks", "My Longs"), add your current selection with `+ sel`, run an entire list with one click. Stored in SQLite — survives restarts.
 
 ---
 
 ## Tool Health
 
-Click **🟢 Tool Health** in the footer to open a panel showing green/red status for every data source: Ollama, FYERS, NSE, Yahoo Finance, RBI, FRED, IndianAPI, MLX/OLMX.
+Click **🔌 Tool Health** in the sidebar footer. 8 parallel probes check: Ollama, FYERS, NSE, Yahoo Finance, RBI RSS, FRED, IndianAPI, MLX/OLMX. 🟢 green = OK · 🟡 yellow = rate-limited or key not set but functionally working · 🔴 red = unreachable.
 
 ---
 
-## Configuration
+## Interactive Chart
 
-### `app/service/models/model_config.json`
-Assigns LLM provider + model per agent. Change models here (no restart needed — edit and re-run).
+`/api/chart/{symbol}/interactive` — Plotly TradingView-style HTML (self-contained, opens in browser):
+- Daily candlesticks + EMA overlays + demand/supply zones + event markers
+- Quarterly PAT bars with YoY% badges
+- Bank KPI badge (GNPA/NNPA/NII/CET1)
+- 15-min panel zoomed to last 5 days (not 365 days squished)
 
-### `app/config/weights.json`
-Agent weights (must sum to 1.0). Controls how much each specialist contributes to the final score.
-
-### `app/config/llm_catalog.json`
-Model list shown in the UI model picker. Add new Ollama models here.
-
-### `app/config/universe.csv`
-Your stock universe. Columns: `symbol, company_name, isin, sub_sector, exchange`.
+The 📊 icon in the results table opens this directly.
 
 ---
 
-## Architecture
+## Configuration files
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for:
-- What each of the 10 agents does in plain English
-- Every data source and what it provides
-- A full Mermaid flow diagram
-- The two-tier Bulk/Deep-Dive strategy
+| File | Purpose |
+|---|---|
+| `app/service/models/model_config.json` | LLM assignment per agent (bulk — default) |
+| `app/service/models/model_config.mixed.json` | Mixed config for deep-dive |
+| `app/config/weights.json` | Agent score weights (must sum to 1.0) |
+| `app/config/llm_catalog.json` | Models shown in UI picker |
+| `app/config/universe.csv` | Your stock universe |
 
 ---
 
-## Project Structure
+## Data storage — what's saved and when pruned
+
+| Table | Grows | Never auto-deleted |
+|---|---|---|
+| `fundamentals_q` | Each new quarter per stock | Yes — safe, small |
+| `news` | ~10-20 rows/day per query | ⚠ Prune at 90 days |
+| `company_events` | ~50-100 events/stock | ⚠ Prune at 180 days |
+| `fii_dii_daily` | 2 rows/trading day | Low risk |
+| `oi_snapshots` | 1 row/stock/run | ⚠ Prune at 60 days |
+| `run_agent_io` | 10 agents × N stocks per run | ⚠ **~57 MB/run** — keep last 100 |
+| `watchlists` | Until user deletes | Negligible |
+
+Use the **🗑 Prune** button in the Data Store tab to clean up. The `run_agent_io` table grows fastest — prune regularly.
+
+---
+
+## Project structure
 
 ```
 stock_scoring/
 ├── app/
-│   ├── api.py                     FastAPI application
+│   ├── api.py                      FastAPI application + all routes
+│   ├── market_api.py               Market tab + Stock tab (FastAPI router)
 │   ├── Agents/
-│   │   ├── Fundamental/           PAT/EPS/GNPA analyst
-│   │   ├── Industry/              Macro/sector analyst
-│   │   ├── Technical/
-│   │   │   ├── Indicator/         EMA/RSI/MACD/zones
-│   │   │   ├── Trader/            Demand-supply trade plans
-│   │   │   ├── RSAgent/           Relative strength
-│   │   │   ├── QuantRisk/         Beta/VaR/drawdown
-│   │   │   ├── PromoterIntel/     Pledge + shareholding
-│   │   │   ├── CatalystQuality/   Event/news classification
-│   │   │   ├── TrendFlow/         FII/DII + deals
-│   │   │   └── OptionChain/       PCR/max pain/call wall
-│   │   └── DecisionMaker/         Final reconciliation
+│   │   ├── Fundamental/            NSE XBRL + news + events analyst
+│   │   ├── Industry/               RBI + FRED + Nifty macro analyst
+│   │   └── Technical/
+│   │       ├── Indicator/          EMA/RSI/MACD/ADX/zones (Python)
+│   │       ├── Trader/             Demand-supply LONG/SHORT trade plans
+│   │       ├── RSAgent/            Relative strength vs sector index
+│   │       ├── QuantRisk/          Beta (date-aligned) / VaR / drawdown
+│   │       ├── PromoterIntel/      Pledge + shareholding (PSU short-circuit)
+│   │       ├── CatalystQuality/    Event and news quality classification
+│   │       ├── TrendFlow/          FII/DII flows + bulk/block deals
+│   │       └── OptionChain/        PCR / max pain / call wall / put floor
 │   ├── config/
-│   │   ├── universe.csv           Your stock universe (98 stocks)
-│   │   ├── weights.json           Agent scoring weights
-│   │   ├── llm_catalog.json       Available models for UI picker
-│   │   └── ollama/                Modelfile templates
+│   │   ├── universe.csv            98 Indian financial stocks
+│   │   ├── weights.json            Agent scoring weights
+│   │   └── llm_catalog.json        Models shown in UI
 │   ├── graph/
-│   │   ├── builder.py             Plain-asyncio orchestrator (no langgraph)
-│   │   └── runner.py              Universe-level concurrency
-│   ├── mcp_server/tools/          All data-fetching tools
-│   ├── scoring/                   Baselines, policy, weights
-│   ├── store/                     SQLite (fundamentals, news, events, runs)
-│   └── viz/
-│       ├── chart.py               Static matplotlib quad chart
-│       └── interactive_chart.py   Plotly TradingView-style HTML chart
+│   │   ├── builder.py              Plain-asyncio _StockGraph + _run_with_retry
+│   │   └── runner.py               Universe-level concurrency
+│   ├── mcp_server/tools/           All data-fetching tools (MCP-compatible)
+│   │   ├── market.py               FYERS candles (in-process cache)
+│   │   ├── fundamentals.py         NSE XBRL + Yahoo ratios (7-day cache)
+│   │   ├── nse.py                  Events/deals/shareholding/pledge/FII-DII
+│   │   ├── quant_risk.py           Beta (date-aligned, guarded) + VaR
+│   │   └── indianapi.py            Premium news (once-daily, shared)
+│   ├── scoring/
+│   │   ├── baselines.py            Deterministic baseline per agent
+│   │   └── policy.py               Weighted score + consensus + completeness
+│   ├── service/models/
+│   │   ├── llm_factory.py          get_llm() with run-time config override
+│   │   ├── model_config.json       Bulk: nemotron-bolt everywhere
+│   │   └── model_config.mixed.json Deep-dive: qwen3 + bolt + nano
+│   ├── store/
+│   │   ├── db.py                   SQLite schema + prune_old_data + db_stats
+│   │   └── fundamentals.py         horizon_metrics (EPS split-adjusted)
+│   ├── viz/
+│   │   ├── chart.py                Static matplotlib PNG chart
+│   │   └── interactive_chart.py    Plotly TradingView-style HTML chart
+│   └── static/index.html           Complete SPA (sidebar + 4 tabs)
 ├── docs/
-│   └── ARCHITECTURE.md            Full system diagram + story
-├── scripts/                       CLI utilities (fyers_login, bench_nimble)
-├── tests/                         pytest suite (163 tests)
-├── .env.example                   Environment variable template
+│   ├── ARCHITECTURE.md             Full system diagram + agent stories
+│   └── TRADINGAGENTS_COMPARISON.md Data source comparison
+├── tests/                          pytest suite (35 tests)
 ├── requirements.txt
+├── .env.example
 └── README.md
 ```
 
@@ -186,20 +252,21 @@ stock_scoring/
 
 ```bash
 pytest -q --deselect "tests/test_pipeline.py::test_real_mcp_server_over_stdio_exposes_all_tools"
-# Expected: 163+ passed, 1 pre-existing yfinance-eviction flake
+# Expected: 35 passed, pre-existing MCP + yfinance-eviction flakes excluded
 ```
 
 ---
 
-## Known Limitations
+## Known limitations
 
-- **Internal thinking tokens not counted** — reasoning models (QwQ, o3, DeepSeek-R1) use hidden chain-of-thought tokens not tracked here. Actual cost/tokens for those models will be higher than reported.
-- **FYERS token expires daily** — run `python -m scripts.fyers_login` each morning to refresh.
-- **NSE is rate-limited** — a daily cache gate (`refreshed_today`) prevents hammering NSE. Run with `--force-refresh` only when needed.
-- **IndianAPI quota** — 500 requests/month. The pipeline fetches market-wide news once per day and shares it across all stocks.
+- **Internal thinking tokens** — reasoning models (QwQ, DeepSeek-R1) hide chain-of-thought tokens; token counts shown are an undercount for those models
+- **FYERS token expires daily** — run `python -m scripts.fyers_login` each morning
+- **NSE rate limits** — a daily gate prevents hammering NSE; use `FORCE_REFRESH=1` only when needed
+- **IndianAPI quota** — 500 req/month; pipeline fetches market-wide news once per day, shared across all stocks
+- **Nifty 500 coverage** — 232 symbols tracked; ~10-15 may have no Yahoo data on any given day (newly listed, suspended, etc.)
 
 ---
 
 ## Licence
 
-Research / personal use only. This tool does not constitute financial advice.
+Research / personal use only. Not financial advice.

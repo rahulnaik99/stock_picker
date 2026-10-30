@@ -389,24 +389,57 @@ Inspired by the TradingAgents project, the UI was redesigned from a top tab-bar 
 
 **File:** `app/market_api.py`
 
-Powered by `yfinance` batch download across the configured universe (~98 financial stocks).
-Results are **5-minute cached** in-process (no DB write needed).
+Powered by `yfinance` batch download. Results are **5-minute cached per universe** in-process.
 
-Displays:
-- **4 KPI cards:** advancers · decliners · median change · market mood
+> **Superset cache design:** Nifty 500 (232 symbols) is downloaded once. All sub-index views are
+> derived by filtering the cached rows — switching between Nifty 50 / Bank / IT / etc. after
+> Nifty 500 is loaded costs 0 additional API calls and returns in milliseconds.
+
+#### Universe switcher
+
+Two top-level modes at the top of the Market tab:
+
+| Mode | What it downloads |
+|---|---|
+| 🏦 **Financial stocks** | Our 98-stock NSE financial universe (banks, NBFC, insurance, AMC) |
+| 📊 **Nifty indices** | Sub-filter: Nifty 500 · 50 · Bank · IT · Small Cap · Mid Cap · Large Cap · All Nifty |
+
+**Nifty 500 is the superset.** When Nifty 500 is cached (5 min), all sub-index views (Nifty 50, Bank, IT, etc.) are served by filtering from that cached payload — **zero re-download**. Switching from Nifty 500 → Nifty Bank is instant. Total unique Nifty symbols: **232** across all index families.
+
+#### Displays
+
+- **4 KPI cards:** advancers · decliners · median change · market mood (Bullish/Bearish/Mixed)
 - **Breadth bar:** green (advancers) vs red (decliners) proportional bar
-- **Gainers / losers table** — top 12 by day % change; click any to open in Stock tab
-- **Highest volume table** — top 12 by shares traded
-- **Sector heatmap** — colour-coded tiles (green = up, red = down), filterable by sub-sector (private banks / PSU banks / NBFC / insurance). Tile intensity scales with magnitude.
-- **Breakouts & momentum table** — three tabs:
-  - *3-day winners* — stocks with highest 3-day cumulative return
-  - *Consistent losers* — stocks with ≥2 consecutive down-days
-  - *Unusual volume* — stocks with highest volume-ratio vs 5-day average
+- **Gainers / Losers** — strict top-6 gainers + bottom-6 losers, deduplicated (a symbol appears in exactly one column)
+- **Volume / OI Activity card** — two tabs:
+  - *Volume* — top 12 by shares traded today
+  - *OI Activity* — top 10 by `|OI Δ%|`, classified as Long Buildup / Short Covering / Short Buildup / Long Unwinding from stored `oi_snapshots` (populated by scoring runs)
+- **Sector heatmap** — colour-coded tiles filterable by sub-sector; tile intensity scales with magnitude
+- **Breakouts & momentum** — three tabs: 3-day winners · consistent losers · unusual volume
+
+#### Freshness / loading UX
+
+- **Loading overlay** — blurred spinner covers the market section while data fetches; removed on response
+- **Live freshness ticker** — "Data fetched: 2m 30s ago" below the title, updates every 10 s; turns red + shows "refresh now" link when >5 min old
+- **LIVE/CACHED badge** — green badge shows exact fetch time on fresh download; amber shows "CACHED (filtered from nifty500)"
+- **Cache-Control: no-store** — all movers responses include this header + `_t=<timestamp>` cache-buster on force-refresh to prevent browser HTTP caching from swallowing requests
+
+#### OI Activity classification
+
+| Classification | Signal |
+|---|---|
+| **Long Buildup** | Price ↑ + OI ↑ — fresh longs accumulating |
+| **Short Covering** | Price ↑ + OI ↓ — shorts closing, price squeezed up |
+| **Short Buildup** | Price ↓ + OI ↑ — fresh short positions added |
+| **Long Unwinding** | Price ↓ + OI ↓ — longs exiting |
 
 ```
-GET /api/market/movers?refresh=false
+GET /api/market/movers?universe=nifty500&refresh=false
   → { rows, gainers, losers, highest_volume, three_day_winners,
-      consistent_losers, high_volume_3d, breadth, source }
+      consistent_losers, high_volume_3d, breadth, source, cached, filtered_from }
+
+GET /api/market/oi-activity?top_n=10
+  → { top_by_abs_oi_change, long_side, short_side, total_symbols }
 ```
 
 ---
@@ -437,7 +470,12 @@ Returns quarterly or FY-aggregated annual results.
 
 **Source:** Our **NSE XBRL store** (`app/store/fundamentals.py`) — the same authoritative filed numbers used by the scoring agents. *Not* Yahoo estimates.
 
-Displayed as mini bar charts: Revenue vs PAT · EPS per period.
+Displayed as **proper SVG bar charts** matching TradingAgents style:
+- Y-axis with 5 gridlines + INR tick labels (formatted as `1.2L`, `3.4k`)
+- Bars from the 0-baseline (negative values shown below)
+- Grouped side-by-side bars for multi-series (Revenue + PAT together)
+- **▲/▼ X% vs prev** delta badge (green/red) top-right of each chart card
+- Tooltip on hover for exact value
 
 #### 3. Health flags + valuation
 
@@ -529,7 +567,11 @@ Calls `GET /api/health/tools` which fires **8 parallel async probes** (4-second 
 | IndianAPI | `GET stock.indianapi.in/news` with key |
 | MLX / OLMX | `GET {OLMX_BASE_URL}/models` |
 
-Status: 🟢 green = reachable · 🟡 yellow = key not configured · 🔴 red = unreachable / error.
+Status: 🟢 green = reachable · 🟡 yellow = key not configured **or** rate-limited/needs session but operationally working · 🔴 red = unreachable / error.
+
+Important probe notes:
+- **Yahoo Finance 429** → yellow ("rate-limited but working") — the probe hits the chart endpoint directly; the actual `yfinance` library routes through different endpoints with correct headers and is unaffected by this rate-limit
+- **NSE 403** → yellow ("requires session") — NSE blocks unauthenticated raw GETs; the NSE tools work via proper browser-session init. Probe uses `/api/allIndices` with `Referer` headers
 
 ---
 
