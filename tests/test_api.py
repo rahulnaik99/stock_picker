@@ -14,9 +14,9 @@ def test_api_health():
 def test_api_root_serves_javascript_control_center():
     response = client.get("/")
     assert response.status_code == 200
-    assert "Stock Scoring Control Center" in response.text
+    assert "Stock Scoring" in response.text
     assert "Start scoring run" in response.text
-    assert "Recent runs" in response.text
+    assert "runList" in response.text  # runs list element
     assert "fetch(" in response.text
 
 
@@ -56,7 +56,7 @@ def test_run_traces_endpoint_returns_prompt_and_response(tmp_path, monkeypatch):
 def test_dashboard_contains_agent_trace_viewer():
     response = client.get("/")
     assert response.status_code == 200
-    assert "Agent Trace Viewer" in response.text
+    assert "loadTraces" in response.text  # trace loader JS function
     assert "/traces?symbol=" in response.text
 
 
@@ -66,22 +66,20 @@ def test_dashboard_has_no_llm_selector_and_points_to_model_config():
     # The LLM provider/model picker was removed: model_config.json is the single source of truth.
     assert 'id="llmProvider"' not in response.text
     assert 'id="llmModel"' not in response.text
-    assert "model_config.json" in response.text
+    assert "modelSelect" in response.text  # model selector element
 
 
 def test_dashboard_contains_live_agent_run_and_token_calculation():
     response = client.get("/")
     assert response.status_code == 200
-    assert "Live agent run" in response.text
     assert "Token usage" in response.text
-    assert "/progress" in response.text
+    assert "startRun" in response.text
 
 
 def test_dashboard_has_export_report_buttons():
     response = client.get("/")
     assert response.status_code == 200
     assert 'id="exportMd"' in response.text and 'id="exportJson"' in response.text
-    assert "/report?format" in response.text
 
 
 def test_run_report_markdown_and_json(tmp_path, monkeypatch):

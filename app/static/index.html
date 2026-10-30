@@ -2,193 +2,500 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Stock Scoring · Control Center</title>
+<title>Stock Scoring · Research Workspace</title>
 <style>
-:root{color-scheme:light;--bg:#eef2f9;--panel:#ffffff;--panel2:#f3f6fc;--line:#dbe3ef;--text:#1f2a3d;--muted:#64748b;--accent:#2563eb;--accent-weak:#e5edff;--green:#15a06a;--green-weak:#e3f6ee;--red:#d84a5b;--red-weak:#fdeaec;--amber:#d98324;--amber-weak:#fcf0df;--gray-weak:#eef1f6}
+/* ── tokens ──────────────────────────────────────────────────────────────── */
+:root{
+  --bg:#f4f6fa;--card:#fff;--soft:#f1f4f9;--line:#e3e8ef;
+  --tx:#172033;--mu:#66738a;--ac:#2f5bea;--acs:#e8eefe;
+  --up:#0e9f6e;--ups:#e3f6ee;--dn:#e5484d;--dns:#fdeced;
+  --am:#c27c0e;--ams:#fff5de;
+  --sidebar:210px;
+  font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+/* ── resets ──────────────────────────────────────────────────────────────── */
 *{box-sizing:border-box}
-body{margin:0;background:radial-gradient(ellipse at 12% -5%,#dde8ff 0,transparent 42%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-button,input,select{font:inherit}
-button{border:0;border-radius:9px;padding:10px 14px;background:var(--accent);color:#fff;font-weight:650;cursor:pointer}
-button:disabled{opacity:.5;cursor:not-allowed}
-.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
-.wrap{max-width:1480px;margin:auto;padding:26px}
-.top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:24px}
-.brand{display:flex;gap:12px;align-items:center}
-.logo{width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,#2563eb,#15a06a);display:grid;place-items:center;color:#fff;font-size:22px;font-weight:900}
-.eyebrow{color:var(--green);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800}
-.top h1{font-size:23px;margin:0}.sub{color:var(--muted);margin-top:3px}
-.status{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 12px;color:var(--muted);white-space:nowrap}
-.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:7px}
-.layout{display:grid;grid-template-columns:minmax(360px,.95fr) minmax(0,1.5fr);gap:18px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px #1e293b0d;min-width:0}
-.panel h2{font-size:16px;margin:0}
-.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}
-.hint{font-size:12px;color:var(--muted)}
-.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.field{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:10px 11px;color:var(--text);min-width:0}
-.search{flex:1;min-width:140px}.select{min-width:125px}
-.stock-list{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:10px}
-.stock-row{display:flex;gap:10px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer}
-.stock-row:last-child{border-bottom:0}.stock-row:hover{background:var(--panel2)}
-.stock-row input{accent-color:var(--accent)}.stock-name{font-weight:650}.stock-meta{font-size:11px;color:var(--muted)}
-.ticker{margin-left:auto;color:var(--accent);font-size:12px;font-weight:800}
-.controls{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0;color:var(--muted);font-size:12px}
-.controls label{display:flex;align-items:center;gap:7px}.controls input{accent-color:var(--accent)}
-.run-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.selected-count{color:var(--muted);font-size:12px;margin-right:auto}
-.notice{display:none;padding:10px 12px;margin:12px 0;border-radius:9px;background:var(--amber-weak);color:#8a5212;border:1px solid #f0d9b8}
-.notice.show{display:block}
-.run-list{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow:auto}
-.run-item{display:flex;align-items:center;gap:10px;text-align:left;width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:12px;border-radius:10px;cursor:pointer}
-.run-item.active{border-color:var(--accent);background:var(--accent-weak)}
-.run-id{font-size:12px;font-weight:800}.run-detail{color:var(--muted);font-size:11px}
-.badge{margin-left:auto;font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:999px;background:var(--gray-weak);color:#55617a;font-weight:700}
-.badge.completed{background:var(--green-weak);color:#0f7a4f}
-.badge.failed{background:var(--red-weak);color:#b4293a}
-.badge.running,.badge.queued{background:var(--amber-weak);color:#8a5212}
-.empty{padding:22px;text-align:center;color:var(--muted)}
-.results-panel{margin-top:18px}
-.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:15px 0}
-.metric{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px}
-.metric span{display:block;color:var(--muted);font-size:11px}.metric strong{display:block;font-size:21px;margin-top:3px}
-.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
-table{border-collapse:collapse;width:100%;min-width:720px}
-th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-tbody tr:hover{background:var(--panel2)}
-td.reason{white-space:normal;min-width:240px;color:#45506a}
-.score{font-weight:800}.positive{color:var(--green)}.negative{color:var(--red)}.neutral{color:var(--amber)}
-/* ---- live run view ---- */
-.live{margin-top:18px}
-.live-top{display:grid;grid-template-columns:1.1fr 1.4fr;gap:14px;margin-bottom:14px}
-@media(max-width:820px){.live-top{grid-template-columns:1fr}}
-.gaugebox{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:16px}
-.gaugebox h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-.progbar{height:10px;border-radius:999px;background:var(--gray-weak);overflow:hidden}
-.progbar>i{display:block;height:100%;background:linear-gradient(90deg,#2563eb,#15a06a);transition:width .4s ease}
-.prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:7px}
+body{margin:0;background:var(--bg);color:var(--tx);font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 14px;font-weight:600;transition:border-color .15s,background .15s}
+button:hover:not(:disabled){border-color:var(--ac)}
+button:disabled{opacity:.5;cursor:wait}
+.pri{background:var(--ac);border-color:var(--ac);color:#fff}
+.pri:hover:not(:disabled){background:#2449c8;border-color:#2449c8}
+.sm{padding:5px 11px;font-size:12px}
+input,select{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);outline:none}
+input:focus,select:focus{border-color:var(--ac)}
+a{color:var(--ac);text-decoration:none}
+/* ── layout ──────────────────────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:var(--sidebar) 1fr;min-height:100vh}
+aside{background:var(--card);border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
+.brand{padding:6px 10px 18px;display:flex;gap:10px;align-items:center}
+.logo{width:32px;height:32px;border-radius:10px;background:var(--ac);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;flex-shrink:0}
+.brand-name{font-weight:800;font-size:15px;line-height:1.2}
+.brand-sub{font-size:10px;color:var(--mu)}
+nav button{display:flex;gap:10px;align-items:center;width:100%;border:0;background:none;color:var(--mu);padding:9px 12px;text-align:left;border-radius:8px;font-size:13px;font-weight:500}
+nav button:hover{background:var(--soft);color:var(--tx)}
+nav button.on{background:var(--acs);color:var(--ac)}
+nav .sep{height:1px;background:var(--line);margin:6px 4px}
+.sidebar-footer{margin-top:auto;padding:10px 10px 4px;font-size:11px;color:var(--mu);line-height:1.6}
+main{min-width:0;padding:0 28px 48px}
+/* ── top header (sticky) ─────────────────────────────────────────────────── */
+.topbar{position:sticky;top:0;z-index:10;background:var(--bg);padding:14px 0 12px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line);margin-bottom:0}
+.pick{flex:1;max-width:420px}
+.chip{font-size:11px;padding:4px 10px;border-radius:99px;background:var(--soft);color:var(--mu);font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--ups);color:var(--up)}.chip.err{background:var(--dns);color:var(--dn)}.chip.warn{background:var(--ams);color:var(--am)}
+/* ── pages ──────────────────────────────────────────────────────────────── */
+.page{display:none;padding-top:20px}.page.on{display:block}
+/* ── grids / cards ──────────────────────────────────────────────────────── */
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}
+.card-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.mt{margin-top:14px}
+/* ── kpi cards ──────────────────────────────────────────────────────────── */
+.kpi-l{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+.kpi-v{font-size:26px;font-weight:800;margin-top:5px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.up{color:var(--up)}.dn{color:var(--dn)}
+/* ── section titles ─────────────────────────────────────────────────────── */
+h1{font-size:22px;font-weight:800;letter-spacing:-.4px;margin:0 0 4px}
+h2{font-size:14px;font-weight:700;margin:0}
+.sub{font-size:12px;color:var(--mu);margin-top:2px}
+/* ── seg buttons ────────────────────────────────────────────────────────── */
+.seg{display:inline-flex;background:var(--soft);border-radius:8px;padding:3px;gap:2px}
+.seg button{border:0;background:none;padding:5px 12px;font-size:12px;border-radius:6px;color:var(--mu);font-weight:600}
+.seg button.on{background:var(--card);color:var(--ac);box-shadow:0 1px 3px #0002}
+/* ── table ──────────────────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu);padding:8px 10px;border-bottom:2px solid var(--line);text-align:left}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border:0}
+tr:hover td{background:var(--soft)}
+.tw{overflow:auto;max-height:460px}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+/* ── badges ─────────────────────────────────────────────────────────────── */
+.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--soft);color:var(--mu)}
+.b-up{background:var(--ups);color:var(--up)}.b-dn{background:var(--dns);color:var(--dn)}.b-am{background:var(--ams);color:var(--am)}
+/* ── lk (table link button) ─────────────────────────────────────────────── */
+.lk{border:0;background:none;padding:0;color:var(--ac);font-weight:700;cursor:pointer}
+/* ── breadth bar ────────────────────────────────────────────────────────── */
+.bbar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--soft)}
+/* ── sector heatmap ─────────────────────────────────────────────────────── */
+.heat-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.htile{padding:7px 10px;border-radius:7px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;border:0;transition:opacity .15s;white-space:nowrap}
+.htile:hover{opacity:.85}
+/* ── progress bar ───────────────────────────────────────────────────────── */
+.progbar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden;margin:6px 0 4px}
+.progbar i{display:block;height:100%;background:var(--ac);border-radius:3px;transition:width .4s}
+/* ── financial chart canvas ─────────────────────────────────────────────── */
+#priceChart{background:var(--card);border-radius:8px;overflow:hidden}
+/* ── flag pills ─────────────────────────────────────────────────────────── */
+.flag{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:99px;font-size:12px;font-weight:600;margin:3px 4px 3px 0}
+.flag.good{background:var(--ups);color:var(--up)}.flag.bad{background:var(--dns);color:var(--dn)}.flag.warn{background:var(--ams);color:var(--am)}
+/* ── gaugebox (scoring) ─────────────────────────────────────────────────── */
+.gaugebox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.gaugebox h4{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu)}
 .tok-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.tok{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px}
-.tok small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.tok{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:11px}
+.tok small{display:block;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
 .tok b{display:block;font-size:20px;margin-top:3px;font-variant-numeric:tabular-nums}
-.bymodel{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
-.chip{font-size:11px;padding:4px 9px;border-radius:999px;background:var(--accent-weak);color:#1e40af;border:1px solid #c7d7fb}
-.matrix-wrap{overflow:auto;border:1px solid var(--line);border-radius:11px}
-.matrix{border-collapse:collapse;width:100%;min-width:760px}
-.matrix th,.matrix td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
-.matrix th{background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.matrix td.sym{text-align:left;font-weight:700}
-.cell{display:inline-flex;flex-direction:column;align-items:center;gap:2px;min-width:74px}
-.st{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px}
-.st.pending{background:var(--gray-weak);color:#67748c}
-.st.running{background:var(--amber-weak);color:#8a5212}
-.st.done{background:var(--green-weak);color:#0f7a4f}
-.st.error,.st.unavailable{background:var(--red-weak);color:#b4293a}
-.st.skipped{background:var(--gray-weak);color:#67748c}
-.cell em{font-style:normal;color:var(--muted);font-size:10px}
-.pulse{width:7px;height:7px;border-radius:50%;background:#d98324;animation:pulse 1s infinite}
-@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
-/* ---- trace viewer ---- */
-.trace-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
-.trace-card{border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:14px;min-width:0}
-.trace-card h3{margin:0 0 8px;font-size:14px}.trace-meta{color:var(--muted);font-size:11px;margin-bottom:10px}
-.trace-card details{margin-top:8px;border-top:1px solid var(--line);padding-top:9px}
-.trace-card summary{cursor:pointer;color:var(--accent);font-weight:700;padding:3px 0}
-.trace-section{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
-.trace-section h4{margin:0 0 8px;color:#334155;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
-.trace-section pre,.trace-card pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;margin:0;background:#f7f9fd;border:1px solid var(--line);border-radius:8px;padding:12px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}
-.trace-kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.trace-kv div{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px}
-.trace-kv small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase}.trace-kv strong{display:block;margin-top:4px;overflow-wrap:anywhere}
-.trace-markdown{color:#33415a;line-height:1.7;overflow-wrap:anywhere}
-.trace-markdown h1,.trace-markdown h2,.trace-markdown h3{color:#1f2a3d;margin:14px 0 6px}
-.trace-markdown code{background:#eef1f8;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font:12px ui-monospace,monospace}
-.trace-markdown pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fd;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}
-.trace-markdown blockquote{margin:8px 0;padding:4px 12px;border-left:3px solid var(--accent);color:var(--muted)}
-.trace-status{display:inline-block;border-radius:6px;padding:3px 7px;background:var(--green-weak);color:#0f7a4f;font-size:11px;font-weight:700}
-.footer{color:var(--muted);font-size:11px;margin:18px 2px}.links a{color:var(--accent);text-decoration:none;margin-left:12px}.links a:hover{text-decoration:underline}
-.model-row{display:flex;gap:8px;align-items:center;margin:10px 0}
-.model-row select{flex:1;min-width:0}
-.model-badge{font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:var(--accent-weak);color:#1e40af;border:1px solid #c7d7fb;white-space:nowrap}
-.model-badge.unavail{background:var(--gray-weak);color:#67748c;border-color:var(--line)}
-.score-cell.pos{color:#16a34a}.score-cell.neg{color:#dc2626}.score-cell.neu{color:var(--muted)}
-.tabnav{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--bg)}
-.tablink{padding:9px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
-.tablink.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tablink:hover:not(.active){color:var(--text)}
+.tok-hi b{color:var(--ac)}
+/* ── agent matrix ───────────────────────────────────────────────────────── */
+.matrix-wrap{overflow-x:auto}
+.agent-matrix{border-collapse:collapse;font-size:11px;white-space:nowrap}
+.agent-matrix th{padding:6px 8px;border-bottom:2px solid var(--line);text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu)}
+.agent-matrix td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:center}
+.agent-matrix .sym{font-weight:700;text-align:left;min-width:70px}
+.c-ok{color:var(--up)}.c-err{color:var(--dn)}.c-wait{color:var(--am)}.c-skip{color:var(--mu)}
+/* ── data store table ───────────────────────────────────────────────────── */
 .ds-table{width:100%;border-collapse:collapse;font-size:12px}
-.ds-table th{padding:7px 10px;border-bottom:2px solid var(--line);text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;background:var(--bg);z-index:1}
+.ds-table th{padding:7px 10px;border-bottom:2px solid var(--line);text-align:left;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;background:var(--bg);z-index:1}
 .ds-table td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ds-table tr:hover td{background:var(--panel2)}
-.ds-stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:11px}
-.ds-stat b{font-size:15px;display:block}
-.tok-hi b{color:var(--accent)}
-th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
+.ds-table tr:hover td{background:var(--soft)}
+.ds-stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-size:11px}
+.ds-stat b{font-size:16px;display:block;font-variant-numeric:tabular-nums}
+/* ── watchlist panel ────────────────────────────────────────────────────── */
+#watchlistPanel{position:fixed;top:0;right:0;width:280px;background:var(--card);border-left:1px solid var(--line);height:100vh;overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;z-index:900;box-shadow:-4px 0 20px #0001;display:flex;flex-direction:column}
+/* ── tool health drawer ─────────────────────────────────────────────────── */
+#toolHealthDrawer{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:2px solid var(--ac);padding:14px 20px;z-index:1000;box-shadow:0 -4px 20px #0001}
+/* ── run mode toggle ────────────────────────────────────────────────────── */
+.run-mode-row{display:flex;gap:8px;align-items:center;margin:10px 0}
+/* ── score colors ───────────────────────────────────────────────────────── */
+.score-cell.positive{color:var(--up)}.score-cell.negative{color:var(--dn)}.score-cell.neutral{color:var(--mu)}
+/* ── stock list ─────────────────────────────────────────────────────────── */
+.stock-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer}
+.stock-row:hover{background:var(--soft)}
+.stock-row input{width:auto;padding:0;border:none;background:transparent}
+.stock-name{font-weight:600;font-size:13px}
+.stock-meta{font-size:11px;color:var(--mu)}
+.ticker{margin-left:auto;font-size:11px;font-weight:700;font-family:monospace;color:var(--mu)}
+/* ── field ──────────────────────────────────────────────────────────────── */
+.field{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);width:100%;font-size:13px;outline:none}
+.field:focus{border-color:var(--ac)}
+/* ── hint / notice / empty ──────────────────────────────────────────────── */
+.hint{font-size:11px;color:var(--mu)}
+.notice{font-size:12px;padding:8px 12px;border-radius:8px;background:var(--ams);color:var(--am);display:none}
+.empty{padding:28px;text-align:center;color:var(--mu);font-size:13px}
+/* ── loading spinner ────────────────────────────────────────────────────── */
+.loading{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--ac);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:900px){.trace-grid{grid-template-columns:1fr}.layout{grid-template-columns:1fr}.wrap{padding:15px}.top{align-items:flex-start}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.top{flex-direction:column}.panel{padding:14px}.metric strong{font-size:18px}}
-</style></head>
-<body><main class="wrap">
-<header class="top"><div class="brand"><div class="logo">↗</div><div><div class="eyebrow">Research workspace</div><h1>Stock Scoring Control Center</h1><div class="sub">Select your universe, launch a run, and watch every agent work in real time.</div></div></div><div class="status" id="apiStatus"><span class="dot"></span>Checking API…</div></header>
-<nav class="tabnav"><button class="tablink active" id="tabScoring" onclick="switchTab('scoring')">Scoring</button><button class="tablink" id="tabData" onclick="switchTab('data')">🗄 Data Store</button></nav>
-<div id="scoringView">
-<div class="layout">
-<section class="panel"><div class="panel-head"><div><h2>Build a scoring run</h2><div class="hint">Choose individual stocks or filter the universe.</div></div><span class="badge" id="universeCount">Loading</span></div>
-<div class="toolbar"><input id="search" class="field search" placeholder="Search symbol or company…" autocomplete="off"><select id="sector" class="field select"><option value="">All sub-sectors</option></select></div>
-<div class="toolbar"><button class="secondary" id="selectVisible">Select visible</button><button class="secondary" id="clearSelection">Clear selection</button><button class="secondary" id="selectAll">Select all results</button></div>
-<div class="stock-list" id="stockList"><div class="empty"><span class="loading"></span> Loading stock universe…</div></div>
-<div class="hint" id="llmHelp" style="margin:12px 0 6px">
-  <b>LLM model</b> — override the per-agent defaults from <code>model_config.json</code>:
-</div>
-<div class="model-row">
-  <select id="modelSelect" class="field" style="flex:1"><option value="">⚙ Default (model_config.json per agent)</option></select>
-  <select id="timeoutSelect" class="field" title="LLM timeout per agent call" style="min-width:85px">
-    <option value="120">120 s</option>
-    <option value="180">180 s</option>
-    <option value="300" selected>300 s</option>
-    <option value="600">600 s</option>
-    <option value="900">15 min</option>
-  </select>
-</div>
-<div id="modelStatus" class="hint" style="color:var(--muted);font-size:11px;margin-bottom:10px">Loading…</div>
-<div class="hint" style="font-size:11px;color:var(--muted);margin-bottom:10px">⏱ Timeout applies per-agent LLM call. Raise it for large/slow models (gemma4, 14B+).</div>
-<div class="controls"><label><input type="checkbox" id="stub"> Demo mode (stub LLM)</label><label><input type="checkbox" id="refresh" checked> Refresh stale data</label><label><input type="checkbox" id="forceRefresh"> Force refresh</label></div>
-<div style="margin:10px 0;display:flex;gap:6px;align-items:center">
-  <span class="hint" style="margin:0;font-size:11px">Run mode:</span>
-  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="runMode" id="modeBulk" value="bulk" checked> <span>⚡ Bulk scan</span> <span class="hint" style="font-size:10px">(nemotron-bolt, fast)</span></label>
-  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="runMode" id="modeDeep" value="deep_dive"> <span>🔬 Deep dive</span> <span class="hint" style="font-size:10px">(mixed: qwen3+bolt+nano)</span></label>
-</div>
-<div class="notice" id="notice"></div><div class="run-actions"><span class="selected-count" id="selectionCount">0 stocks selected</span><button id="startRun">▶ Start scoring run</button></div>
-<div class="footer">Scoring is research-only. No orders are placed. Demo mode may still call configured data providers.</div></section>
-<section class="panel"><div class="panel-head"><div><h2>Recent runs</h2><div class="hint">Select a run to view live progress and rankings.</div></div><button class="secondary" id="reloadRuns">↻ Refresh</button></div>
-<div class="run-list" id="runList"><div class="empty">Loading recent runs…</div></div>
-<div class="panel-head" style="margin-top:22px"><div><h2>Selected run</h2><div class="hint" id="selectedRunHint">No run selected</div></div><button class="secondary" id="viewResults" disabled>View results</button></div>
-<div id="runSummary" class="empty">Start a run or select one from the history.</div>
-</section></div>
+/* ── bymodel chips ──────────────────────────────────────────────────────── */
+.bymodel{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.bymodel .chip{background:var(--soft);color:var(--tx)}
+/* ── results table ──────────────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto}
+.reason{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ── progress items ─────────────────────────────────────────────────────── */
+.prog-label{display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-top:2px}
+/* ── controls row ───────────────────────────────────────────────────────── */
+.controls{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}
+.controls label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.run-actions{display:flex;align-items:center;gap:12px;margin-top:10px}
+.selected-count{font-size:12px;color:var(--mu)}
+/* ── section group label ─────────────────────────────────────────────────── */
+.nav-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);padding:12px 12px 4px;opacity:.7}
+/* ── responsive ─────────────────────────────────────────────────────────── */
+@media(max-width:900px){
+  .app{grid-template-columns:1fr}
+  aside{position:static;height:auto;flex-direction:row;overflow:auto;padding:8px}
+  .brand,.sidebar-footer,.nav-label{display:none}
+  nav{display:flex}
+  nav button{white-space:nowrap;padding:8px 12px}
+  .g4,.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}
+  main{padding:0 14px 30px}
+}
+@media(max-width:560px){.g4,.g3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
 
-<section class="panel live" id="livePanel" style="display:none"><div class="panel-head"><div><h2>Live agent run</h2><div class="hint" id="liveHint">Each specialist runs concurrently per stock; the Decision Maker reconciles them.</div></div><span class="badge" id="liveBadge">—</span></div>
-<div class="live-top">
-<div class="gaugebox"><h4>Pipeline progress</h4><div class="progbar"><i id="progFill" style="width:0%"></i></div><div class="prog-label"><span id="progAgents">0 / 0 agent tasks done</span><span id="progStocks"></span></div></div>
-<div class="gaugebox"><h4>Token usage &amp; speed</h4><div class="tok-grid"><div class="tok"><small>Input tok</small><b id="tokIn">0</b></div><div class="tok"><small>Output tok</small><b id="tokOut">0</b></div><div class="tok"><small>Total tok</small><b id="tokTotal">0</b></div><div class="tok tok-hi"><small>Run time</small><b id="runElapsed">—</b></div><div class="tok tok-hi"><small>Read / s</small><b id="tokReadRate">—</b></div><div class="tok tok-hi"><small>Gen / s</small><b id="tokGenRate">—</b></div></div><div class="bymodel" id="byModel"></div></div>
+<!-- ═══════════════════════════════════════ SIDEBAR ══════════════════════ -->
+<aside>
+  <div class="brand">
+    <div class="logo">↗</div>
+    <div><div class="brand-name">Stock Scoring</div><div class="brand-sub">Research workspace</div></div>
+  </div>
+  <nav id="nav">
+    <div class="nav-label">Browse</div>
+    <button data-p="market">📊 Market</button>
+    <button data-p="stock">📈 Stock</button>
+    <div class="sep"></div>
+    <div class="nav-label">Analysis</div>
+    <button data-p="scoring" class="on">⚙ Scoring</button>
+    <div class="sep"></div>
+    <div class="nav-label">Storage</div>
+    <button data-p="data">🗄 Data Store</button>
+  </nav>
+  <div class="sidebar-footer">
+    Research &amp; simulation only.<br>No live orders are placed.<br>
+    <a href="#" onclick="toggleToolHealth()" style="font-size:11px">🔌 Tool Health</a>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════ MAIN ═════════════════════════ -->
+<main>
+
+<!-- sticky top bar: stock search + status chips -->
+<div class="topbar">
+  <input class="pick field" id="pick" list="syms" placeholder="Search symbol…" style="max-width:340px" aria-label="Stock search">
+  <datalist id="syms"></datalist>
+  <span class="chip" id="selChip">—</span>
+  <span style="flex:1"></span>
+  <span class="chip" id="apiStatus"><span class="loading"></span>API…</span>
+  <span class="chip" id="fyChip">FYERS…</span>
+  <button class="sm" id="wlToggleBtn" onclick="toggleWatchlist()" title="Watchlists" style="font-size:13px">⭐ Lists</button>
 </div>
-<div class="matrix-wrap"><table class="matrix" id="agentMatrix"><thead></thead><tbody></tbody></table></div>
+
+<!-- ══════════════════════════════════════ PAGE: MARKET ═════════════════ -->
+<section id="p-market" class="page">
+  <div class="card-hd" style="margin-top:4px">
+    <div><h1>Market overview</h1><div class="sub" id="mDate">Daily movers · Yahoo Finance bars</div></div>
+    <button class="pri sm" id="mRefresh" onclick="loadMarket(true)">↻ Refresh</button>
+  </div>
+  <div class="grid g4">
+    <div class="card"><div class="kpi-l">Advancers</div><div class="kpi-v up" id="kAdv">—</div></div>
+    <div class="card"><div class="kpi-l">Decliners</div><div class="kpi-v dn" id="kDec">—</div></div>
+    <div class="card"><div class="kpi-l">Median change</div><div class="kpi-v" id="kMed">—</div></div>
+    <div class="card"><div class="kpi-l">Market mood</div><div class="kpi-v" id="kMood">—</div></div>
+  </div>
+  <div class="card mt">
+    <div class="card-hd"><div><h2>Market breadth</h2><div class="sub">Advancers vs decliners across universe</div></div></div>
+    <div class="bbar" id="breadthBar"></div>
+  </div>
+  <div class="grid g2 mt">
+    <div class="card">
+      <div class="card-hd"><div><h2>Top gainers / losers</h2><div class="sub">Day % change</div></div></div>
+      <div id="glTable"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><h2>Highest volume</h2><div class="sub">Shares traded today</div></div></div>
+      <div id="volTable"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+  <div class="card mt">
+    <div class="card-hd">
+      <h2>Sector heatmap</h2>
+      <div class="seg" id="hmSeg">
+        <button data-m="all" class="on">All</button>
+        <button data-m="bank_private">Pvt Banks</button>
+        <button data-m="bank_psu">PSU Banks</button>
+        <button data-m="nbfc">NBFC/HFC</button>
+        <button data-m="insurance">Insurance</button>
+      </div>
+    </div>
+    <div class="heat-wrap" id="heatMap"></div>
+  </div>
+  <div class="card mt">
+    <div class="card-hd">
+      <h2>Breakouts &amp; momentum</h2>
+      <div class="seg" id="momSeg">
+        <button data-m="three_day_winners" class="on">3-day winners</button>
+        <button data-m="consistent_losers">Consistent losers</button>
+        <button data-m="high_volume_3d">Unusual volume</button>
+      </div>
+    </div>
+    <div class="tw"><div id="momTable"><div class="empty">Loading…</div></div></div>
+  </div>
+  <div class="hint mt" id="mSrc"></div>
 </section>
 
-<section class="panel results-panel"><div class="panel-head"><div><h2>Ranked stocks</h2><div class="hint" id="resultsHint">Results appear here after a run completes.</div></div><div class="toolbar" style="margin:0"><label class="hint"><input id="validOnly" type="checkbox"> Valid only</label><button class="secondary" id="downloadCsv" disabled>Export CSV</button></div></div>
-<div id="metrics" class="metrics" style="display:none"></div><div id="resultsTable" class="empty">No results loaded.</div>
-<div class="panel-head" style="margin-top:24px"><div><h2>Agent Trace Viewer</h2><div class="hint">Inspect prompts, input payloads, raw model replies, token usage, and the agent's explanation.</div></div></div>
-<div class="toolbar"><select id="traceSymbol" class="field select" aria-label="Trace symbol"><option value="">Select a symbol</option></select><button class="secondary" id="loadTraces" disabled>Load agent traces</button><button class="secondary" id="showChart" disabled title="Open Trader chart (price + demand/supply zones + bull/bear entry/exit)">📊 Chart</button><button class="secondary" id="exportMd" disabled>Export report (.md)</button><button class="secondary" id="exportJson" disabled>Export (.json)</button></div>
-<div class="hint">Traces are available only when the run saved raw LLM traces. The report bundles every agent's model input (system + payload) and output (raw reply) — handy to share for debugging. Raw prompts can contain market data and configuration details; keep this local dashboard private.</div>
-<div id="traceResults" class="empty">Select a completed run and a symbol, then load traces.</div></section>
-<div class="footer links">Local application · <a href="/docs" target="_blank" rel="noreferrer">API docs</a><a href="/health" target="_blank" rel="noreferrer">Health</a> · <a href="#" onclick="toggleToolHealth()" style="text-decoration:none">🟢 Tool Health</a> · Keep this service bound to localhost unless authentication is configured.</div>
-
-<!-- ── TOOL HEALTH SLIDING DRAWER ────────────────────────────────────── -->
-<div id="toolHealthDrawer" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:2px solid var(--accent);padding:14px 20px;z-index:1000;box-shadow:0 -4px 20px #0008">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <b style="font-size:13px">🔌 Tool Health</b>
+<!-- ══════════════════════════════════════ PAGE: STOCK ══════════════════ -->
+<section id="p-stock" class="page">
+  <div class="card-hd" style="margin-top:4px">
+    <div>
+      <h1 id="sTitle">Select a stock</h1>
+      <div class="sub" id="sSub">Enter a symbol in the search bar above</div>
+    </div>
+    <button class="pri" onclick="nav('scoring')" title="Run AI scoring on this stock">⚙ Score this stock →</button>
+  </div>
+  <!-- KPI row -->
+  <div class="grid g4">
+    <div class="card"><div class="kpi-l">Last close</div><div class="kpi-v" id="sLast">—</div></div>
+    <div class="card"><div class="kpi-l">Day change</div><div class="kpi-v" id="sChg">—</div></div>
+    <div class="card"><div class="kpi-l">Period range</div><div class="kpi-v" id="sRng" style="font-size:18px">—</div></div>
+    <div class="card"><div class="kpi-l">Volume</div><div class="kpi-v" id="sVol">—</div></div>
+  </div>
+  <!-- price chart -->
+  <div class="card mt">
+    <div class="card-hd">
+      <div><h2>Price &amp; volume</h2><div class="sub" id="pSrc">Yahoo Finance daily bars; delayed/coverage-dependent</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="seg" id="perSeg">
+          <button data-v="1mo">1M</button><button data-v="3mo">3M</button>
+          <button data-v="6mo" class="on">6M</button><button data-v="1y">1Y</button>
+        </div>
+        <div class="seg" id="emaSeg">
+          <button data-e="20" class="on">EMA20</button>
+          <button data-e="50" class="on">EMA50</button>
+          <button data-e="200">EMA200</button>
+        </div>
+      </div>
+    </div>
+    <div id="priceChart"><div class="empty">Select a symbol above to load the chart.</div></div>
+  </div>
+  <!-- financial health -->
+  <div class="card-hd mt"><h1 style="margin:0">Financial health</h1>
     <div style="display:flex;gap:8px">
-      <button class="secondary" onclick="loadToolHealth()" style="font-size:11px;padding:5px 10px">↻ Re-check</button>
-      <button class="secondary" onclick="toggleToolHealth()" style="font-size:11px;padding:5px 10px">✕ Hide</button>
+      <div class="seg" id="frSeg">
+        <button data-v="quarterly" class="on">Quarterly</button>
+        <button data-v="annual">Annual</button>
+      </div>
+      <button class="sm" id="fRefresh" onclick="loadStock(currentSym,true)">↻ Refresh</button>
+    </div>
+  </div>
+  <div class="hint" id="fSt"></div>
+  <div class="grid g3">
+    <div class="card">
+      <h2>Health score</h2><div class="sub">Rule-based flags</div>
+      <div id="healthBox"><div class="empty">—</div></div>
+    </div>
+    <div class="card" style="grid-column:span 2">
+      <h2>Valuation snapshot</h2><div class="sub">Yahoo Finance ratios · current</div>
+      <div id="valBox"><div class="empty">—</div></div>
+    </div>
+  </div>
+  <div class="grid g2 mt" id="finCharts"></div>
+</section>
+
+<!-- ══════════════════════════════════════ PAGE: SCORING ════════════════ -->
+<section id="p-scoring" class="page">
+<div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start">
+
+<!-- left: build panel -->
+<div>
+  <div class="card">
+    <div class="card-hd"><h2>Build a run</h2></div>
+    <div style="margin-bottom:8px;display:flex;gap:6px">
+      <select id="sectorFilter" class="field" style="font-size:12px" onchange="filterStocks()">
+        <option value="">All sectors</option>
+        <optgroup label="🏦 Banks"><option value="bank_private">Private Banks</option><option value="bank_psu">PSU Banks</option><option value="bank_small_finance">Small Finance Banks</option></optgroup>
+        <optgroup label="🛡 Insurance"><option value="insurance_life">Life Insurance</option><option value="insurance_general">General Insurance</option></optgroup>
+        <optgroup label="💳 NBFC + HFC"><option value="nbfc">NBFC</option><option value="hfc">HFC</option></optgroup>
+        <optgroup label="Other"><option value="amc_wealth">AMC / Wealth</option></optgroup>
+      </select>
+      <input id="symSearch" class="field" placeholder="Filter symbol…" style="font-size:12px;flex:1" oninput="filterStocks()">
+    </div>
+    <div id="stockList" style="max-height:260px;overflow-y:auto;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="sm" onclick="selectAll(true)" style="font-size:11px">Select all</button>
+      <button class="sm" onclick="selectAll(false)" style="font-size:11px">Clear</button>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="stub"> Demo mode</label>
+      <label><input type="checkbox" id="refresh" checked> Refresh data</label>
+      <label><input type="checkbox" id="forceRefresh"> Force refresh</label>
+    </div>
+    <div class="run-mode-row">
+      <span class="hint">Run mode:</span>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="radio" name="runMode" value="bulk" checked> ⚡ Bulk</label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="radio" name="runMode" value="deep_dive"> 🔬 Deep dive</label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <select id="modelSelect" class="field" style="font-size:12px;flex:1"><option value="">Default model</option></select>
+      <select id="timeoutSelect" class="field" style="font-size:12px;width:90px">
+        <option value="300">5 min</option><option value="600" selected>10 min</option><option value="900">15 min</option><option value="1800">30 min</option>
+      </select>
+    </div>
+    <div class="notice" id="notice"></div>
+    <div class="run-actions">
+      <span class="selected-count" id="selectionCount">0 stocks</span>
+      <button id="startRun" class="pri" style="flex:1">▶ Start scoring run</button>
+    </div>
+  </div>
+</div>
+
+<!-- right: live progress + results -->
+<div>
+  <div class="gaugebox">
+    <h4>Pipeline progress</h4>
+    <div class="progbar"><i id="progFill" style="width:0%"></i></div>
+    <div class="prog-label"><span id="progAgents">0 / 0 agent tasks done</span><span id="progStocks"></span></div>
+  </div>
+  <div class="gaugebox mt">
+    <h4>Token usage &amp; speed</h4>
+    <div class="tok-grid">
+      <div class="tok"><small>Input tok</small><b id="tokIn">0</b></div>
+      <div class="tok"><small>Output tok</small><b id="tokOut">0</b></div>
+      <div class="tok"><small>Total tok</small><b id="tokTotal">0</b></div>
+      <div class="tok tok-hi"><small>Run time</small><b id="runElapsed">—</b></div>
+      <div class="tok tok-hi"><small>Read / s</small><b id="tokReadRate">—</b></div>
+      <div class="tok tok-hi"><small>Gen / s</small><b id="tokGenRate">—</b></div>
+    </div>
+    <div class="bymodel" id="byModel"></div>
+  </div>
+  <div class="card mt">
+    <div class="card-hd">
+      <h2>Runs</h2>
+      <button class="sm" onclick="loadRuns()">↻</button>
+    </div>
+    <div id="runList" style="max-height:180px;overflow-y:auto"></div>
+  </div>
+  <div class="card mt">
+    <div class="card-hd">
+      <h2>Agent matrix</h2>
+      <div id="matrixMeta" class="hint"></div>
+    </div>
+    <div class="matrix-wrap"><div id="agentMatrix"><div class="empty hint">Run a scoring to see the agent matrix.</div></div></div>
+  </div>
+  <div class="card mt" id="resultsCard" style="display:none">
+    <div class="card-hd">
+      <h2>Ranked stocks</h2>
+      <div style="display:flex;gap:8px">
+        <div class="seg" id="resTab">
+          <button data-t="table" class="on">Table</button>
+          <button data-t="traces">Traces</button>
+        </div>
+      </div>
+    </div>
+    <div id="metrics" style="display:none;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px"></div>
+    <div id="resultsTable"><div class="empty">No results yet.</div></div>
+    <div id="tracePanel" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <select id="traceSymbol" class="field" style="max-width:160px"><option value="">Select symbol</option></select>
+        <button class="sm" id="loadTraces" disabled>Load traces</button>
+        <button class="sm" id="showChart" disabled title="Interactive chart">📊 Chart</button>
+        <button class="sm" id="exportMd" disabled>Export .md</button>
+        <button class="sm" id="exportJson" disabled>Export .json</button>
+      </div>
+      <div id="traceContent"></div>
+    </div>
+  </div>
+  <div class="hint" style="margin-top:8px">Research only · no orders placed</div>
+</div>
+
+</div><!-- /scoring grid -->
+</section>
+
+<!-- ══════════════════════════════════════ PAGE: DATA STORE ═════════════ -->
+<section id="p-data" class="page">
+  <div class="card-hd"><h1>Data Store</h1>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="hint">Prune:</span>
+      <select id="pruneNewsDays" class="field" style="width:90px;font-size:11px">
+        <option value="30">30d news</option><option value="60">60d</option><option value="90" selected>90d</option>
+      </select>
+      <select id="pruneRunsKeep" class="field" style="width:110px;font-size:11px">
+        <option value="20">keep 20 runs</option><option value="50">50</option><option value="100" selected>100</option>
+      </select>
+      <button class="sm" id="pruneBtn" onclick="runPrune()">🗑 Prune</button>
+    </div>
+  </div>
+  <div id="dbStatsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
+  <!-- subtabs -->
+  <div class="seg" id="dataSeg" style="margin-bottom:14px">
+    <button data-t="fundamentals" class="on">📊 Quarterly</button>
+    <button data-t="news">📰 News</button>
+    <button data-t="events">📋 Events</button>
+    <button data-t="fii">💰 FII/DII</button>
+    <button data-t="oi">📈 OI</button>
+    <button data-t="runs">▶ Runs</button>
+    <button data-t="agentio">🤖 Agent I/O</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <input id="dsSymbol" class="field" placeholder="Symbol…" style="width:110px;font-size:12px" oninput="loadDataTab()">
+    <input id="dsScope"  class="field" placeholder="Scope…"  style="width:160px;font-size:12px;display:none" oninput="loadDataTab()">
+    <input id="dsRunId"  class="field" placeholder="Run ID…" style="width:190px;font-size:12px;display:none" oninput="loadDataTab()">
+    <select id="dsDays" class="field" style="width:90px;font-size:12px" onchange="loadDataTab()">
+      <option value="7">7d</option><option value="30" selected>30d</option><option value="90">90d</option><option value="365">1y</option>
+    </select>
+    <span id="dsCount" class="hint" style="align-self:center"></span>
+  </div>
+  <div id="dataTableWrap" style="overflow-x:auto;max-height:calc(100vh - 280px);overflow-y:auto">
+    <div class="empty hint">Select a subtab.</div>
+  </div>
+</section>
+
+</main><!-- /main -->
+
+<!-- ══════════════════════════════════════ WATCHLIST PANEL ══════════════ -->
+<div id="watchlistPanel">
+  <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+    <b style="font-size:13px">⭐ Watchlists</b>
+    <button class="sm" onclick="toggleWatchlist()">✕</button>
+  </div>
+  <div style="padding:10px 14px;border-bottom:1px solid var(--line)">
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input id="wlNewName" class="field" placeholder="New list name…" style="flex:1;font-size:12px">
+      <button class="sm pri" onclick="createWatchlist()">+</button>
+    </div>
+    <div style="display:flex;gap:6px">
+      <select id="wlActiveList" class="field" style="flex:1;font-size:12px"><option value="">— pick list —</option></select>
+      <button class="sm" onclick="addSelectedToWatchlist()" title="Add selected stocks">+ sel</button>
+    </div>
+  </div>
+  <div id="wlContent" style="flex:1;overflow-y:auto;padding:4px 0"></div>
+  <div style="padding:10px 14px;border-top:1px solid var(--line)">
+    <button id="runWatchlist" style="width:100%;font-size:12px" disabled onclick="runFromWatchlist()">▶ Run selected list</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ TOOL HEALTH DRAWER ═══════════ -->
+<div id="toolHealthDrawer">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <b>🔌 Tool Health</b>
+    <div style="display:flex;gap:8px">
+      <button class="sm" onclick="loadToolHealth()">↻ Re-check</button>
+      <button class="sm" onclick="toggleToolHealth()">✕ Hide</button>
     </div>
   </div>
   <div id="toolHealthGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
@@ -196,324 +503,439 @@ th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
   </div>
 </div>
 
-<!-- ── WATCHLIST PANEL ────────────────────────────────────────────────── -->
-<div id="watchlistPanel" style="position:fixed;top:60px;right:0;width:280px;background:var(--panel);border-left:1px solid var(--line);height:calc(100vh - 60px);overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;z-index:900;box-shadow:-4px 0 16px #0006;display:flex;flex-direction:column">
-  <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
-    <b style="font-size:13px">⭐ Watchlists</b>
-    <button class="secondary" onclick="toggleWatchlist()" style="font-size:11px;padding:4px 8px;min-width:0">✕</button>
-  </div>
-  <div style="padding:10px 14px;border-bottom:1px solid var(--line)">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input id="wlNewName" class="field" placeholder="New list name…" style="flex:1;font-size:12px;padding:6px 8px">
-      <button class="secondary" onclick="createWatchlist()" style="font-size:11px;padding:6px 8px;min-width:0">+</button>
-    </div>
-    <div style="display:flex;gap:6px">
-      <select id="wlActiveList" class="field" style="flex:1;font-size:12px;padding:4px 6px"><option value="">— pick list —</option></select>
-      <button class="secondary" onclick="addSelectedToWatchlist()" title="Add selected stocks to this list" style="font-size:11px;padding:6px 8px;min-width:0">+ sel</button>
-    </div>
-  </div>
-  <div id="wlContent" style="flex:1;overflow-y:auto;padding:6px 0"></div>
-  <div style="padding:10px 14px;border-top:1px solid var(--line)">
-    <button id="runWatchlist" style="width:100%;font-size:12px" disabled onclick="runFromWatchlist()">▶ Run selected list</button>
-  </div>
-</div>
-<button id="wlToggleBtn" onclick="toggleWatchlist()" title="My Watchlists" style="position:fixed;top:50%;right:0;transform:translateY(-50%) rotate(-90deg);transform-origin:center;background:var(--accent);color:#fff;border:none;padding:6px 14px;border-radius:8px 8px 0 0;font-size:12px;cursor:pointer;z-index:901">⭐ Lists</button>
-</div><!-- /scoringView -->
-
-<!-- ═══════════════════════════════════════════════════════ DATA STORE TAB ══ -->
-<div id="dataView" style="display:none;padding:16px 20px">
-
-  <!-- top bar: stats + prune -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-    <div id="dbStatsBar" style="display:flex;gap:10px;flex-wrap:wrap"></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span class="hint" style="font-size:11px">Prune older than:</span>
-      <select id="pruneNewsDays" class="field" style="width:90px;font-size:11px;padding:4px"><option value="30">30d news</option><option value="60">60d news</option><option value="90" selected>90d news</option><option value="180">180d news</option></select>
-      <select id="pruneRunsKeep" class="field" style="width:110px;font-size:11px;padding:4px"><option value="20">keep 20 runs</option><option value="50">keep 50 runs</option><option value="100" selected>keep 100 runs</option><option value="200">keep 200 runs</option></select>
-      <button class="secondary" id="pruneBtn" onclick="runPrune()" style="font-size:11px;padding:6px 12px">🗑 Prune DB</button>
-    </div>
-  </div>
-
-  <!-- subtab nav -->
-  <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:0">
-    <button class="tablink active" id="dst-fundamentals" onclick="switchDataTab('fundamentals')">📊 Quarterly Results</button>
-    <button class="tablink" id="dst-news" onclick="switchDataTab('news')">📰 News</button>
-    <button class="tablink" id="dst-events" onclick="switchDataTab('events')">📋 Events</button>
-    <button class="tablink" id="dst-fii" onclick="switchDataTab('fii')">💰 FII / DII</button>
-    <button class="tablink" id="dst-oi" onclick="switchDataTab('oi')">📈 OI Snapshots</button>
-    <button class="tablink" id="dst-runs" onclick="switchDataTab('runs')">▶ Runs</button>
-    <button class="tablink" id="dst-agentio" onclick="switchDataTab('agentio')">🤖 Agent I/O</button>
-  </div>
-
-  <!-- search row (shared) -->
-  <div id="dataSearchRow" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <input id="dsSymbol" class="field" placeholder="Symbol filter…" style="width:120px;font-size:12px" oninput="loadDataTab()">
-    <input id="dsScope"  class="field" placeholder="Scope / query filter…" style="width:180px;font-size:12px;display:none" oninput="loadDataTab()">
-    <input id="dsRunId"  class="field" placeholder="Run ID…" style="width:200px;font-size:12px;display:none" oninput="loadDataTab()">
-    <select id="dsDays" class="field" style="width:100px;font-size:12px" onchange="loadDataTab()">
-      <option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">1 year</option>
-    </select>
-    <span id="dsCount" class="hint" style="align-self:center;font-size:11px;margin-left:4px"></span>
-  </div>
-
-  <div id="dataTableWrap" style="overflow-x:auto;max-height:calc(100vh - 240px);overflow-y:auto">
-    <div class="empty hint">Select a subtab above.</div>
-  </div>
-
-</div><!-- /dataView -->
-
-</main>
+<!-- ═══════════════════════════════════════ JAVASCRIPT ══════════════════ -->
 <script>
+/* ── helpers ────────────────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
-const PROVIDER_LABELS={'ollama':'Ollama','olmx':'MLX / OLMX','openai':'OpenAI','vllm':'vLLM'};
-let _modelData={};
-async function loadModels(){
-  $('modelStatus').textContent='Loading…';
-  try{
-    const d=await api('/api/models');
-    _modelData=d;
-    const sel=$('modelSelect');
-    sel.innerHTML='<option value="">⚙ Default (model_config.json per agent)</option>';
-    const catalog=d.catalog||{};
-    let total=0;
-    for(const [prov,models] of Object.entries(catalog)){
-      if(!Array.isArray(models)||!models.length)continue;
-      const label=PROVIDER_LABELS[prov]||prov;
-      const grp=document.createElement('optgroup');
-      grp.label=`${label} (${models.length})`;
-      for(const m of models){
-        const opt=document.createElement('option');
-        opt.value=JSON.stringify({provider:prov,model:m});
-        opt.textContent=m;
-        grp.appendChild(opt);
-        total++;
-      }
-      sel.appendChild(grp);
-    }
-    $('modelStatus').textContent=total?`${total} models — edit app/config/llm_catalog.json to add more`:'No models in catalog';
-  }catch(e){
-    $('modelStatus').textContent='Could not load model catalog';
-  }
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const fmt = n => {const x=Number(n);if(!Number.isFinite(x))return'—';return x>=1e7?`${(x/1e7).toFixed(2)}Cr`:x>=1e5?`${(x/1e5).toFixed(1)}L`:x.toLocaleString('en-IN');}
+async function api(url,opts={}){
+  const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});
+  if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||r.statusText);}
+  return r.json();
 }
-let universe=[], selected=new Set(), runs=[], activeRunId=null, results=[], pollToken=0;
-$('modelSelect').addEventListener('change',()=>{
-  const v=$('modelSelect').value;if(!v)return;
-  const m=JSON.parse(v).model;
-  const size=parseInt((m.match(/:(\d+)b/i)||m.match(/(\d+)b/i)||[])[1])||0;
-  const sel=$('timeoutSelect');
-  if(size>=30)sel.value='900';else if(size>=13)sel.value='600';else if(size>=7)sel.value='300';else if(size>0)sel.value='180';
+function notice(msg,err=true){const el=$('notice');if(!msg){el.style.display='none';return;}el.style.display='block';el.style.background=err?'var(--dns)':'var(--ups)';el.style.color=err?'var(--dn)':'var(--up)';el.textContent=msg;}
+
+/* ── nav ────────────────────────────────────────────────────────────────── */
+let currentSym='';
+function nav(p){
+  document.querySelectorAll('.page').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('#nav button[data-p]').forEach(b=>b.classList.remove('on'));
+  $(`p-${p}`).classList.add('on');
+  document.querySelector(`#nav button[data-p="${p}"]`)?.classList.add('on');
+  if(p==='market'&&!_marketLoaded)loadMarket(false);
+  if(p==='data'){loadDbStats();loadDataTab();}
+}
+document.querySelectorAll('#nav button[data-p]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.p)));
+
+/* ── stock search ───────────────────────────────────────────────────────── */
+let allStocks=[];
+$('pick').addEventListener('change',e=>{
+  const v=e.target.value.split('—')[0].trim().toUpperCase();
+  if(v){gotoStock(v);}
 });
-// Columns ordered by LangGraph execution topology:
-// ① fundamental + industry + [8 technical specialists]  all start in parallel at t=0
-// ② decision_maker  runs only after every agent above is done  ← blue separator
-const AGENTS=[
-  ['fundamental','Fundamental'],   // branch 1 (parallel)
-  ['industry','Industry'],         // branch 2 (parallel)
-  ['indicator','Indicator'],       // technical branch — pure computation, typically fastest
-  ['rs_agent','RS'],               // pure computation
-  ['quant_risk','Q.Risk'],         // pure computation
-  ['trader','Trader'],             // zones + events + OI
-  ['promoter_intel','Promoter'],   // NSE shareholding + pledge
-  ['option_chain','Options'],      // NSE option chain
-  ['investment_trend','Inv.Trend'],// NSE FII/DII + news
-  ['catalyst_quality','Catalyst'], // events + news classification
-  ['decision_maker','Decision'],   // ② serial — waits for all above
-];
-const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt = n => Number(n||0).toLocaleString();
-function notice(message, show=true){$('notice').textContent=message;$('notice').classList.toggle('show',show)}
-async function api(path, options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({detail:r.statusText}));if(!r.ok)throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||data));return data}
-async function checkHealth(){
-  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000));
-  try{
-    await Promise.race([api('/health'),timeout]);
-    $('apiStatus').innerHTML='<span class="dot" style="background:#22c55e"></span> API connected';
-  }catch(e){
-    $('apiStatus').innerHTML='<span class="dot" style="background:#f59e0b"></span> API unavailable';
-    notice('Cannot connect to the API: '+e.message);
-  }
-}
-async function loadUniverse(){try{const d=await api('/api/universe?limit=1000');universe=d.stocks||[];$('universeCount').textContent=`${universe.length} stocks`;const sectors=[...new Set(universe.map(x=>x.sub_sector).filter(Boolean))].sort();
-// Synthetic "category" options (prefix groups) shown above the exact sub-sectors
-const catOpts=[['__banks__','🏦 All Banks (private + PSU + SFB)'],['__insurance__','🛡 All Insurance'],['__nbfc_hfc__','💳 NBFC + Housing Finance']];
-$('sector').innerHTML='<option value="">All sub-sectors</option>'+catOpts.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')+'<option disabled>──────────</option>'+sectors.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');renderStocks()}catch(e){$('stockList').innerHTML=`<div class="empty">Could not load universe: ${escapeHtml(e.message)}</div>`;notice('Could not load the configured stock universe: '+e.message)}}
-const CATEGORY_MATCH={'__banks__':x=>x.sub_sector&&x.sub_sector.toLowerCase().startsWith('bank'),'__insurance__':x=>x.sub_sector&&x.sub_sector.toLowerCase().startsWith('insurance'),'__nbfc_hfc__':x=>x.sub_sector&&(x.sub_sector==='nbfc'||x.sub_sector==='housing_finance')};
-function visibleStocks(){const q=$('search').value.trim().toLowerCase(),s=$('sector').value;const catFn=CATEGORY_MATCH[s];return universe.filter(x=>(catFn?catFn(x):(!s||x.sub_sector===s))&&(!q||String(x.symbol).toLowerCase().includes(q)||String(x.company_name||'').toLowerCase().includes(q)))}
-function renderStocks(){const rows=visibleStocks();$('stockList').innerHTML=rows.length?rows.map(x=>`<label class="stock-row"><input type="checkbox" data-symbol="${escapeHtml(x.symbol)}" ${selected.has(x.symbol)?'checked':''}><span><span class="stock-name">${escapeHtml(x.company_name||x.symbol)}</span><br><span class="stock-meta">${escapeHtml(x.sub_sector||'')}</span></span><span class="ticker">${escapeHtml(x.symbol)}</span></label>`).join(''):'<div class="empty">No stocks match this filter.</div>';$('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`;}
-$('stockList').addEventListener('change',e=>{const box=e.target.closest('input[data-symbol]');if(!box)return;box.checked?selected.add(box.dataset.symbol):selected.delete(box.dataset.symbol);$('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`});
-$('search').addEventListener('input',renderStocks);$('sector').addEventListener('change',renderStocks);
-$('selectVisible').onclick=()=>{visibleStocks().forEach(x=>selected.add(x.symbol));renderStocks()};$('clearSelection').onclick=()=>{selected.clear();renderStocks()};$('selectAll').onclick=()=>{visibleStocks().forEach(x=>selected.add(x.symbol));renderStocks()};
-async function loadRuns(){try{const d=await api('/api/runs?limit=30');runs=d.runs||[];renderRuns()}catch(e){$('runList').innerHTML=`<div class="empty">Could not load runs: ${escapeHtml(e.message)}</div>`}}
-function renderRuns(){if(!runs.length){$('runList').innerHTML='<div class="empty">No saved runs yet. Select stocks and start your first run.</div>';return}$('runList').innerHTML=runs.map(r=>`<div class="run-item ${r.run_id===activeRunId?'active':''}" data-run="${escapeHtml(r.run_id)}"><span>◷</span><span><span class="run-id">${escapeHtml(r.run_id)}</span><br><span class="run-detail">${escapeHtml((r.symbols||[]).join(', ')||r.scope||'Saved run')} · ${escapeHtml(r.created_at||r.as_of||'')}</span></span><span class="badge ${escapeHtml(r.status||'completed')}">${escapeHtml(r.status||'saved')}</span></div>`).join('')}
-$('runList').addEventListener('click',e=>{const b=e.target.closest('[data-run]');if(b)selectRun(b.dataset.run)});
-async function selectRun(id){activeRunId=id;pollToken++;const r=runs.find(x=>x.run_id===id);renderRuns();$('selectedRunHint').textContent=id;$('viewResults').disabled=false;$('exportMd').disabled=false;$('exportJson').disabled=false;$('runSummary').innerHTML=`<div class="hint">Run <b>${escapeHtml(id)}</b></div><p>Status: <span class="badge ${escapeHtml(r?.status||'completed')}">${escapeHtml(r?.status||'saved')}</span></p><p class="hint">Stocks: ${escapeHtml((r?.symbols||[]).join(', ')||r?.scope||'Stored run')}</p><p class="hint">${escapeHtml(r?.error||'')}</p>`;$('livePanel').style.display='block';await refreshProgress(id);if(r?.status==='running'||r?.status==='queued')pollRun(id);else await loadResults(id)}
-// ---------- live progress ----------
-function statusLabel(s){return {pending:'Pending',running:'Running',done:'Done',error:'Error',unavailable:'No data',skipped:'Skipped'}[s]||s}
-function renderMatrix(p){const syms=Object.keys(p.symbols||{}).sort();$('agentMatrix').querySelector('thead').innerHTML='<tr><th class="sym">Stock</th>'+AGENTS.map(a=>`<th class="${a[0]==='decision_maker'?'decision-sep':''}">${a[1]}</th>`).join('')+'</tr>';
-$('agentMatrix').querySelector('tbody').innerHTML=syms.map(sym=>{const row=p.symbols[sym];return `<tr><td class="sym">${escapeHtml(sym)}</td>`+AGENTS.map(([k])=>{const c=row[k]||{status:'pending'};const tok=(c.input_tokens||0)+(c.output_tokens||0);const run=c.status==='running'?'<span class="pulse"></span>':'';const sc=(c.status==='done'&&c.score!=null)?`<em>score ${Number(c.score).toFixed(1)}</em>`:'';const tk=tok?`<em>${fmt(tok)} tok</em>`:'';
-// timing: use duration_ms (LLM call) or wall-clock fallback
-const dms=c.duration_ms||0;const otok=c.output_tokens||0;
-let timeLine='';
-if(dms>100){const sec=(dms/1000).toFixed(1);const tps=Math.round(otok/(dms/1000));timeLine=`<em>${sec}s</em>${tps>0?`<em>${fmt(tps)} t/s`:''}`.replace(/`/g,'');}
-else if(c.started_at&&c.finished_at){const elapsed=((new Date(c.finished_at)-new Date(c.started_at))/1000).toFixed(1);timeLine=`<em>${elapsed}s</em>`;}
-const divCls=k==='decision_maker'?' decision-sep':'';
-return `<td class="${divCls}"><span class="cell"><span class="st ${c.status}">${run}${statusLabel(c.status)}</span>${sc}${tk}${timeLine}</span></td>`}).join('')+'</tr>'}).join('')||`<tr><td class="empty" colspan="${AGENTS.length+1}">No agent activity yet.</td></tr>`;}
-function renderTokens(t,p){t=t||{};$('tokIn').textContent=fmt(t.input_tokens);$('tokOut').textContent=fmt(t.output_tokens);$('tokTotal').textContent=fmt(t.total_tokens);const done=t.agents_done||0,total=t.agents_total||0;$('progFill').style.width=(total?Math.round(done/total*100):0)+'%';$('progAgents').textContent=`${done} / ${total} agent tasks done`;
-// timing + speed
-let elapsedSec=null;
-if(p?.created_at){const s=new Date(p.created_at),e=p.finished_at?new Date(p.finished_at):new Date();elapsedSec=(e-s)/1000;}
-$('runElapsed').textContent=elapsedSec!=null?`${elapsedSec.toFixed(0)}s`:'—';
-const inp=t.input_tokens||0,out=t.output_tokens||0;
-$('tokReadRate').textContent=(elapsedSec>1)?fmt(Math.round(inp/elapsedSec)):'—';
-$('tokGenRate').textContent=(elapsedSec>1)?fmt(Math.round(out/elapsedSec)):'—';
-const bm=t.by_model||{};$('byModel').innerHTML=Object.keys(bm).map(k=>`<span class="chip">${escapeHtml(k)} · ${fmt((bm[k].input_tokens||0)+(bm[k].output_tokens||0))} tok · ${bm[k].calls||0} calls</span>`).join('')||'<span class="hint">No token usage recorded yet.</span>';}
-async function refreshProgress(id){try{const p=await api(`/api/runs/${encodeURIComponent(id)}/progress`);if(activeRunId!==id)return p;$('liveBadge').textContent=p.status||'—';$('liveBadge').className='badge '+(p.status||'');renderMatrix(p);renderTokens(p.totals,p);return p}catch(e){return null}}
-async function pollRun(id){const myToken=++pollToken;for(let i=0;i<300&&activeRunId===id&&pollToken===myToken;i++){await new Promise(r=>setTimeout(r,1500));let d;try{d=await api('/api/runs/'+encodeURIComponent(id))}catch(e){notice('Could not poll run status: '+e.message);return}const idx=runs.findIndex(x=>x.run_id===id);if(idx>=0)runs[idx]={...runs[idx],...d};else runs.unshift(d);renderRuns();if(activeRunId===id)$('runSummary').innerHTML=`<p>Status: <span class="badge ${escapeHtml(d.status)}">${escapeHtml(d.status)}</span></p><p class="hint">${escapeHtml(d.total||0)} stocks · ${escapeHtml(d.ranked??'—')} ranked · ${escapeHtml(d.error||'')}</p>`;await refreshProgress(id);if(['completed','failed'].includes(d.status)){if(d.status==='completed')await loadResults(id);else notice('Run failed: '+(d.error||'See server logs'));return}}}
-$('startRun').onclick=async()=>{if(!selected.size){notice('Select at least one stock first.');return}const btn=$('startRun');btn.disabled=true;btn.innerHTML='<span class="loading"></span> Starting…';notice('',false);try{const modelVal=$('modelSelect').value;const modelOverride=modelVal?JSON.parse(modelVal):null;const timeoutSec=parseInt($('timeoutSelect').value)||300;const body={symbols:[...selected],stub:$('stub').checked,refresh:$('refresh').checked,force_refresh:$('forceRefresh').checked,mode:'inprocess',llm_provider:modelOverride?.provider||'',llm_model:modelOverride?.model||null,llm_timeout:timeoutSec,run_mode:(document.querySelector('input[name="runMode"]:checked')?.value||'bulk')};const d=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});activeRunId=d.run_id;runs.unshift(d);renderRuns();await selectRun(d.run_id);await loadRuns()}catch(e){notice('Could not start run: '+e.message)}finally{btn.disabled=false;btn.textContent='▶ Start scoring run'}};
-$('reloadRuns').onclick=loadRuns;$('viewResults').onclick=()=>activeRunId&&loadResults(activeRunId);$('validOnly').onchange=()=>activeRunId&&loadResults(activeRunId);
-async function loadResults(id){try{const d=await api(`/api/runs/${encodeURIComponent(id)}/results${$('validOnly').checked?'?valid_only=true':''}`);results=d.results||[];renderResults();$('resultsHint').textContent=`Run ${id} · ${results.length} result${results.length===1?'':'s'}`;$('downloadCsv').disabled=!results.length}catch(e){if(/not complete/i.test(e.message))return;$('resultsTable').innerHTML=`<div class="empty">Results unavailable: ${escapeHtml(e.message)}</div>`;$('downloadCsv').disabled=true}}
-function renderResults(){if(!results.length){$('metrics').style.display='none';$('resultsTable').innerHTML='<div class="empty">No result rows available for this run.</div>';return}const valid=results.filter(r=>r.valid===true||r.valid===1).length;$('metrics').style.display='grid';$('metrics').innerHTML=[['Ranked',results.length],['Valid',valid],['Invalid',results.length-valid],['Avg. score',(results.reduce((a,r)=>a+(Number(r.final_score??r.score)||0),0)/results.length).toFixed(2)]].map(([a,b])=>`<div class="metric"><span>${a}</span><strong>${b}</strong></div>`).join('');const cols=[['rank','Rank'],['symbol','Symbol'],['company_name','Company'],['final_score','Score'],['direction','Direction'],['trade_status','Trade status'],['data_completeness','Completeness'],['reasoning_summary','Reasoning']];$('resultsTable').innerHTML=`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${c[1]}</th>`).join('')}<th>Chart</th></tr></thead><tbody>${results.map(r=>`<tr>${cols.map(([k])=>{let v=r[k];if(k==='final_score'){const n=Number(v);return `<td class="score ${n>0?'positive':n<0?'negative':'neutral'}">${Number.isFinite(n)?n.toFixed(2):'—'}</td>`}if(k==='data_completeness'&&v!==null&&v!==undefined&&!Number.isNaN(Number(v)))v=`${(Number(v)*100).toFixed(0)}%`;return `<td class="${k==='reasoning_summary'?'reason':''}">${escapeHtml(v??'—')}</td>`}).join('')}<td><a href="/api/chart/${encodeURIComponent(r.symbol||'')}/interactive" target="_blank" rel="noreferrer" title="Open interactive TradingView-style chart (technical + fundamental)" style="font-size:19px;text-decoration:none;cursor:pointer">📊</a></td></tr>`).join('')}</tbody></table></div>`;updateTraceSymbols()}
-function updateTraceSymbols(){const current=$('traceSymbol').value;const symbols=[...new Set(results.map(r=>String(r.symbol||'').toUpperCase()).filter(Boolean))].sort();$('traceSymbol').innerHTML='<option value="">Select a symbol</option>'+symbols.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');if(symbols.includes(current))$('traceSymbol').value=current;$('loadTraces').disabled=!activeRunId||!$('traceSymbol').value}
-$('traceSymbol').addEventListener('change',()=>{const ok=!!(activeRunId&&$('traceSymbol').value);$('loadTraces').disabled=!ok;$('showChart').disabled=!$('traceSymbol').value});
-$('showChart').onclick=()=>{const s=$('traceSymbol').value;if(s)window.open('/api/chart/'+encodeURIComponent(s)+'/interactive','_blank','noreferrer')};
-function exportReport(fmt){if(!activeRunId)return;const sym=$('traceSymbol').value;const url=`/api/runs/${encodeURIComponent(activeRunId)}/report?format=${fmt}`+(sym?`&symbol=${encodeURIComponent(sym)}`:'');const a=document.createElement('a');a.href=url;a.rel='noreferrer';document.body.appendChild(a);a.click();a.remove()}
-$('exportMd').onclick=()=>exportReport('md');$('exportJson').onclick=()=>exportReport('json');
-function markdownHtml(value){let x=escapeHtml(String(value??''));const blocks=[];x=x.replace(/```([\w-]*)\n?([\s\S]*?)```/g,(_,lang,code)=>{blocks.push(`<pre><code>${code.trim()}</code></pre>`);return `@@BLOCK${blocks.length-1}@@`});x=x.replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>');x=x.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>');x=x.replace(/(?:^\s*[-*] .+(?:\n\s*[-*] .+)*)/gm,m=>'<ul>'+m.trim().split(/\n/).map(line=>'<li>'+line.replace(/^\s*[-*] /,'')+'</li>').join('')+'</ul>');x=x.split(/\n{2,}/).map(part=>{if(/^@@BLOCK\d+@@$/.test(part)||/^<h[1-3]>/.test(part)||/^<ul>/.test(part)||/^<blockquote>/.test(part))return part;return part.trim()?'<p>'+part.replace(/\n/g,'<br>')+'</p>':''}).join('');x=x.replace(/@@BLOCK(\d+)@@/g,(_,i)=>blocks[Number(i)]);return x}
-function payloadSection(title,value){let parsed=value; if(typeof value==='string'){try{parsed=JSON.parse(value)}catch{}}const content=typeof parsed==='object'&&parsed!==null?`<pre>${escapeHtml(JSON.stringify(parsed,null,2))}</pre>`:`<div class="trace-markdown">${markdownHtml(String(parsed??'—'))}</div>`;return `<div class="trace-section"><h4>${title}</h4>${content}</div>`}
-$('loadTraces').onclick=async()=>{if(!activeRunId||!$('traceSymbol').value)return;const symbol=$('traceSymbol').value;$('traceResults').innerHTML='<div class="empty"><span class="loading"></span> Loading traces…</div>';try{const d=await api(`/api/runs/${encodeURIComponent(activeRunId)}/traces?symbol=${encodeURIComponent(symbol)}`);if(!d.traces?.length){$('traceResults').innerHTML='<div class="empty">No raw trace files found for this symbol and run. The agent may have failed before making an LLM call, or trace logging may not have run.</div>';return}$('traceResults').innerHTML='<div class="trace-grid">'+d.traces.map(t=>{const reply=t.reply??'';let parsed=null;try{parsed=typeof reply==='string'?JSON.parse(reply):reply}catch{}const explanation=parsed&&typeof parsed==='object'?(parsed.reasoning||parsed.explanation||parsed.summary||'No explicit explanation field in raw response.'):'';const evidence=parsed?.evidence;const missing=parsed?.missing_data;const resultSummary=parsed&&typeof parsed==='object'?`<div class="trace-kv">${[['Score',parsed.score],['Confidence',parsed.confidence],['Status',parsed.status||'—']].map(([k,v])=>`<div><small>${k}</small><strong>${escapeHtml(v??'—')}</strong></div>`).join('')}</div>`:'';return `<article class="trace-card"><h3>${escapeHtml((t.agent||'Agent').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase()))}</h3><div class="trace-meta">Provider: ${escapeHtml(t.provider||'—')} · Model: ${escapeHtml(t.model||'—')}</div>${t.error?`<div class="notice show">${escapeHtml(t.error)}</div>`:'<span class="trace-status">Trace recorded</span>'}${resultSummary}${explanation?`<div class="trace-section"><h4>Agent explanation</h4><div class="trace-markdown">${markdownHtml(explanation)}</div></div>`:''}${Array.isArray(evidence)&&evidence.length?`<div class="trace-section"><h4>Evidence</h4><div class="trace-markdown"><ul>${evidence.map(e=>`<li>${markdownHtml(typeof e==='string'?e:(e.claim||JSON.stringify(e)))}</li>`).join('')}</ul></div></div>`:''}${Array.isArray(missing)&&missing.length?`<div class="trace-section"><h4>Missing data</h4><div class="trace-markdown"><ul>${missing.map(e=>`<li>${escapeHtml(String(e))}</li>`).join('')}</ul></div></div>`:''}<details><summary>System prompt · readable</summary><div class="trace-markdown">${markdownHtml(t.system||'—')}</div></details><details><summary>Input / user payload · formatted JSON</summary>${payloadSection('Input data',t.user)}</details><details><summary>Raw model response · readable</summary>${parsed&&typeof parsed==='object'?`<div class="trace-markdown">${markdownHtml(explanation||'No explanation returned.')}</div>${payloadSection('Structured response',parsed)}`:`<div class="trace-markdown">${markdownHtml(String(reply||'—'))}</div>`}</details><details><summary>Full trace JSON · developer view</summary>${payloadSection('Complete trace',t)}</details></article>`}).join('')+'</div>'}catch(e){$('traceResults').innerHTML=`<div class="empty">Could not load traces: ${escapeHtml(e.message)}</div>`}};
-$('downloadCsv').onclick=()=>{if(!results.length)return;const cols=[...new Set(results.flatMap(Object.keys))];const csv=[cols.map(csvCell).join(','),...results.map(r=>cols.map(c=>csvCell(r[c])).join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));a.download=`stock-ranking-${activeRunId||'results'}.csv`;a.click();URL.revokeObjectURL(a.href)};function csvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
-// ── TOOL HEALTH ───────────────────────────────────────────────────────────
-let _toolHealthOpen=false;
-function toggleToolHealth(){_toolHealthOpen=!_toolHealthOpen;$('toolHealthDrawer').style.display=_toolHealthOpen?'block':'none';if(_toolHealthOpen)loadToolHealth();}
-async function loadToolHealth(){
-  $('toolHealthGrid').innerHTML='<div class="hint">Checking…</div>';
-  try{
-    const d=await api('/api/health/tools');
-    const tools=d.tools||{};
-    const color={green:'#22c55e',yellow:'#f59e0b',red:'#ef4444'};
-    $('toolHealthGrid').innerHTML=Object.entries(tools).map(([name,t])=>`
-      <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:center">
-        <span style="width:9px;height:9px;border-radius:50%;background:${color[t.status]||'#888'};flex-shrink:0"></span>
-        <div><div style="font-size:12px;font-weight:600">${escapeHtml(name)}</div>
-        <div style="font-size:10px;color:var(--muted)">${escapeHtml(t.note||'')}</div></div>
-      </div>`).join('')||'<div class="hint">No results</div>';
-    // update footer link colour
-    const allGreen=Object.values(tools).every(t=>t.status==='green');
-    const anyRed=Object.values(tools).some(t=>t.status==='red');
-  }catch(e){$('toolHealthGrid').innerHTML=`<div class="empty">Could not check tools: ${escapeHtml(e.message)}</div>`;}
+function gotoStock(sym){
+  currentSym=sym;
+  $('selChip').textContent=sym;
+  nav('stock');
+  loadStock(sym,false);
 }
 
-// ── WATCHLISTS ────────────────────────────────────────────────────────────
-let _wlOpen=false;
-function toggleWatchlist(){_wlOpen=!_wlOpen;$('watchlistPanel').style.transform=_wlOpen?'translateX(0)':'translateX(100%)';if(_wlOpen)loadWatchlists();}
-async function loadWatchlists(){
+/* ══════════════════════════════════════════════════════════════
+   MARKET TAB
+═══════════════════════════════════════════════════════════════ */
+let _marketData=null,_marketLoaded=false;
+async function loadMarket(force=false){
+  $('mRefresh').disabled=true;$('mRefresh').innerHTML='<span class="loading"></span>';
   try{
-    const d=await api('/api/watchlists');
-    const wls=d.watchlists||{};
-    const names=Object.keys(wls);
-    const cur=$('wlActiveList').value;
-    $('wlActiveList').innerHTML='<option value="">— pick list —</option>'+names.map(n=>`<option value="${escapeHtml(n)}" ${n===cur?'selected':''}>${escapeHtml(n)} (${wls[n].length})</option>`).join('');
-    $('runWatchlist').disabled=!cur||!(wls[cur]?.length);
-    if(!names.length){$('wlContent').innerHTML='<div class="hint" style="padding:12px">No watchlists yet. Create one above.</div>';return;}
-    $('wlContent').innerHTML=names.map(name=>{
-      const syms=wls[name]||[];
-      return `<div style="padding:8px 14px;border-bottom:1px solid var(--line)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <b style="font-size:12px">${escapeHtml(name)}</b>
-          <div style="display:flex;gap:4px">
-            <button class="secondary" onclick="selectWatchlistSymbols('${escapeHtml(name)}')" title="Select all in Scoring" style="font-size:10px;padding:3px 6px;min-width:0">▶ select</button>
-            <button class="secondary" onclick="deleteWatchlist('${escapeHtml(name)}')" style="font-size:10px;padding:3px 6px;min-width:0;color:#ef4444">✕</button>
-          </div>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">${syms.map(s=>`<span style="background:var(--accent-weak);color:var(--accent);border-radius:4px;padding:2px 7px;font-size:10px;font-family:monospace;cursor:pointer" onclick="removeFromWatchlist('${escapeHtml(name)}','${escapeHtml(s)}')" title="Click to remove">${escapeHtml(s)} ×</span>`).join('')}</div>
-      </div>`;
-    }).join('');
-  }catch(e){$('wlContent').innerHTML=`<div class="empty" style="padding:12px">Error: ${escapeHtml(e.message)}</div>`;}
+    const d=await api(`/api/market/movers?refresh=${force}`);
+    _marketData=d;_marketLoaded=true;
+    const b=d.breadth||{};
+    $('kAdv').textContent=b.advancers??'—';
+    $('kDec').textContent=b.decliners??'—';
+    const changes=(d.rows||[]).map(r=>r.change_pct).filter(v=>v!=null);
+    const med=changes.length?changes.slice().sort((a,b)=>a-b)[Math.floor(changes.length/2)]:null;
+    $('kMed').textContent=med!=null?`${med>0?'+':''}${med.toFixed(2)}%`:'—';
+    $('kMed').className='kpi-v '+(med>0?'up':med<0?'dn':'');
+    const total=(b.advancers||0)+(b.decliners||0)+(b.unchanged||0)||1;
+    const mood=b.advancers/total>0.6?'Bullish':b.decliners/total>0.6?'Bearish':'Mixed';
+    $('kMood').textContent=mood;$('kMood').className='kpi-v '+(mood==='Bullish'?'up':mood==='Bearish'?'dn':'');
+    const apct=Math.round((b.advancers||0)/total*100);
+    const dpct=Math.round((b.decliners||0)/total*100);
+    $('breadthBar').innerHTML=`<div style="width:${apct}%;background:var(--up)"></div><div style="width:${dpct}%;background:var(--dn)"></div>`;
+    renderGainersLosers(d.gainers||[],d.losers||[]);
+    renderVolume(d.highest_volume||[]);
+    renderHeatmap(d.rows||[]);
+    renderMomentum('three_day_winners');
+    $('mSrc').textContent=d.source||'';
+    if(d.market_date)$('mDate').textContent=`As of ${d.market_date} · ${d.source||''}`;
+  }catch(e){$('mDate').textContent='Error: '+e.message;}
+  $('mRefresh').disabled=false;$('mRefresh').textContent='↻ Refresh';
 }
-$('wlActiveList')?.addEventListener('change',()=>{loadWatchlists();});
-async function createWatchlist(){
-  const name=$('wlNewName').value.trim();
-  if(!name){return;}
-  await api(`/api/watchlists/${encodeURIComponent(name)}`,{method:'POST',body:JSON.stringify({symbols:[]})});
-  $('wlNewName').value='';
-  loadWatchlists();
+function renderGainersLosers(gainers,losers){
+  const rows=[...gainers.map(r=>({...r,_type:'g'})),...losers.map(r=>({...r,_type:'l'}))];
+  $('glTable').innerHTML=`<table><thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Change</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button> <span class="hint">${esc(r.company_name||'')}</span></td>
+    <td class="num">₹${Number(r.close||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+    <td class="num"><span class="badge ${r.change_pct>0?'b-up':'b-dn'}">${r.change_pct>0?'+':''}${Number(r.change_pct||0).toFixed(2)}%</span></td></tr>`).join('')}
+  </tbody></table>`;
 }
-async function addSelectedToWatchlist(){
-  const name=$('wlActiveList').value;
-  if(!name){notice('Pick a watchlist first.');return;}
-  if(!selected.size){notice('Select stocks first.');return;}
-  await api(`/api/watchlists/${encodeURIComponent(name)}`,{method:'POST',body:JSON.stringify({symbols:[...selected]})});
-  loadWatchlists();
+function renderVolume(rows){
+  $('volTable').innerHTML=`<table><thead><tr><th>Stock</th><th class="num">Volume</th><th class="num">Change</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button></td>
+    <td class="num">${fmt(r.volume)}</td>
+    <td class="num"><span class="badge ${r.change_pct>0?'b-up':'b-dn'}">${r.change_pct>0?'+':''}${Number(r.change_pct||0).toFixed(2)}%</span></td></tr>`).join('')}
+  </tbody></table>`;
 }
-async function removeFromWatchlist(name,sym){
-  await api(`/api/watchlists/${encodeURIComponent(name)}?symbol=${encodeURIComponent(sym)}`,{method:'DELETE'});
-  loadWatchlists();
+let _hmFilter='all';
+function renderHeatmap(rows){
+  const fRows=_hmFilter==='all'?rows:rows.filter(r=>(r.sector||'').includes(_hmFilter));
+  const sorted=[...fRows].sort((a,b)=>b.change_pct-a.change_pct);
+  $('heatMap').innerHTML=sorted.map(r=>{
+    const pct=Number(r.change_pct||0);
+    const g=pct>0?Math.min(pct*18,100):0;const rd=pct<0?Math.min(-pct*18,100):0;
+    const bg=pct>0?`rgba(14,159,110,${0.3+g/200})`:pct<0?`rgba(229,72,77,${0.3+rd/200})`:'rgba(102,115,138,0.25)';
+    return`<button class="htile" style="background:${bg}" onclick="gotoStock('${esc(r.symbol)}')" title="${esc(r.company_name||r.symbol)}">${esc(r.symbol)}<br>${pct>0?'+':''}${pct.toFixed(1)}%</button>`;
+  }).join('')||'<div class="hint">No data</div>';
 }
-async function deleteWatchlist(name){
-  if(!confirm(`Delete watchlist "${name}"?`))return;
-  await api(`/api/watchlists/${encodeURIComponent(name)}`,{method:'DELETE'});
-  loadWatchlists();
+document.querySelectorAll('#hmSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#hmSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  _hmFilter=b.dataset.m;if(_marketData)renderHeatmap(_marketData.rows||[]);
+}));
+function renderMomentum(key){
+  const rows=(_marketData||{})[key]||[];
+  if(!rows.length){$('momTable').innerHTML='<div class="empty">No data</div>';return;}
+  $('momTable').innerHTML=`<table><thead><tr><th>Stock</th><th>Company</th><th class="num">Close</th><th class="num">3d Return</th><th class="num">Vol ratio</th></tr></thead><tbody>
+    ${rows.slice(0,25).map(r=>`<tr>
+      <td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button></td>
+      <td class="hint">${esc(r.company_name||'')}</td>
+      <td class="num">₹${Number(r.close||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+      <td class="num"><span class="badge ${(r.return_3d_pct||0)>0?'b-up':'b-dn'}">${r.return_3d_pct!=null?(r.return_3d_pct>0?'+':'')+r.return_3d_pct.toFixed(2)+'%':'—'}</span></td>
+      <td class="num">${r.volume_ratio_5d!=null?r.volume_ratio_5d.toFixed(1)+'×':'—'}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
 }
-function selectWatchlistSymbols(name){
-  api(`/api/watchlists`).then(d=>{
-    const syms=(d.watchlists||{})[name]||[];
-    syms.forEach(s=>selected.add(s));
-    renderStocks();
-    notice(`Added ${syms.length} stocks from "${name}" to selection`);
-    toggleWatchlist();
+document.querySelectorAll('#momSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#momSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  renderMomentum(b.dataset.m);
+}));
+
+/* ══════════════════════════════════════════════════════════════
+   STOCK TAB
+═══════════════════════════════════════════════════════════════ */
+let _chartPeriod='6mo',_emaActive=new Set(['20','50']),_stmtPeriod='quarterly';
+
+async function loadStock(sym,forceRefresh=false){
+  if(!sym)return;
+  $('sTitle').textContent=sym;$('sSub').textContent='Loading…';
+  $('sLast').textContent='—';$('sChg').textContent='—';$('sRng').textContent='—';$('sVol').textContent='—';
+  $('fSt').textContent='Loading financial data…';
+  $('healthBox').innerHTML='<div class="empty">—</div>';
+  $('valBox').innerHTML='<div class="empty">—</div>';
+  $('finCharts').innerHTML='';
+  $('priceChart').innerHTML='<div class="empty"><span class="loading"></span> Loading chart…</div>';
+  await Promise.all([
+    loadPriceChart(sym),
+    loadFundamentals(sym),
+  ]);
+}
+
+/* price chart — plain SVG candlesticks */
+async function loadPriceChart(sym){
+  try{
+    const d=await api(`/api/market/price-history/${sym}?period=${_chartPeriod}`);
+    $('pSrc').textContent=d.source||'';
+    const lat=d.latest||{};
+    $('sLast').textContent=lat.close?`₹${lat.close.toLocaleString('en-IN',{maximumFractionDigits:2})}`:'—';
+    const chg=d.change_pct;
+    $('sChg').textContent=chg!=null?`${chg>0?'+':''}${chg.toFixed(2)}%`:'—';
+    $('sChg').className='kpi-v '+(chg>0?'up':chg<0?'dn':'');
+    $('sRng').textContent=`₹${(d.period_low||0).toLocaleString('en-IN',{maximumFractionDigits:0})} – ₹${(d.period_high||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
+    $('sVol').textContent=fmt(lat.volume);
+    $('sSub').textContent=`${sym} · NSE equity`;
+    renderCandleChart(d.rows||[]);
+  }catch(e){$('priceChart').innerHTML=`<div class="empty">Chart unavailable: ${esc(e.message)}</div>`;}
+}
+function computeEma(closes,n){
+  const k=2/(n+1);let r=[];let prev=null;
+  closes.forEach((c,i)=>{if(i===0){prev=c;r.push(c);}else{prev=c*k+prev*(1-k);r.push(prev);}});
+  return r;
+}
+function renderCandleChart(rows){
+  if(!rows.length){$('priceChart').innerHTML='<div class="empty">No data</div>';return;}
+  const W=Math.min(document.getElementById('priceChart').parentElement.clientWidth-40,1100),H=340;
+  const pad={t:10,r:20,b:40,l:58};
+  const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const closes=rows.map(r=>r.close);
+  const highs=rows.map(r=>r.high),lows=rows.map(r=>r.low);
+  const lo=Math.min(...lows)*0.999,hi=Math.max(...highs)*1.001;
+  const sy=v=>pad.t+cH*(1-(v-lo)/(hi-lo));
+  const sx=i=>pad.l+i*(cW/(rows.length-1||1));
+  const bw=Math.max(1,Math.min(8,cW/rows.length*0.7));
+  // EMA lines
+  let emaLines='';
+  const emaColors={'20':'#f39c12','50':'#3498db','200':'#9b59b6'};
+  _emaActive.forEach(n=>{
+    const vals=computeEma(closes,parseInt(n));
+    const pts=vals.map((v,i)=>`${sx(i)},${sy(v)}`).join(' ');
+    emaLines+=`<polyline points="${pts}" fill="none" stroke="${emaColors[n]}" stroke-width="1.5" opacity="0.85"/>`;
   });
-}
-function runFromWatchlist(){
-  const name=$('wlActiveList').value;
-  if(!name)return;
-  api('/api/watchlists').then(d=>{
-    const syms=(d.watchlists||{})[name]||[];
-    if(!syms.length){notice('Watchlist is empty');return;}
-    syms.forEach(s=>selected.add(s));
-    renderStocks();
-    $('startRun').click();
+  // candles
+  const candles=rows.map((r,i)=>{
+    const up=r.close>=r.open;
+    const col=up?'#0e9f6e':'#e5484d';
+    const x=sx(i);
+    const o=sy(r.open),c=sy(r.close),h=sy(r.high),l=sy(r.low);
+    const y0=Math.min(o,c),h2=Math.abs(o-c)||1;
+    return`<line x1="${x}" y1="${h}" x2="${x}" y2="${l}" stroke="${col}" stroke-width="1"/>
+           <rect x="${x-bw/2}" y="${y0}" width="${bw}" height="${h2}" fill="${col}" rx="0.5"/>`;
+  }).join('');
+  // x-axis labels (monthly)
+  let xlabels='';
+  let lastM='';
+  rows.forEach((r,i)=>{
+    const m=r.date.slice(0,7);
+    if(m!==lastM){lastM=m;xlabels+=`<text x="${sx(i)}" y="${H-8}" text-anchor="middle" fill="#66738a" font-size="10">${m}</text>`;}
   });
+  // y-axis
+  const nTicks=5;let yticks='';
+  for(let t=0;t<=nTicks;t++){const v=lo+(hi-lo)*t/nTicks;yticks+=`<text x="${pad.l-6}" y="${sy(v)+4}" text-anchor="end" fill="#66738a" font-size="10">₹${Math.round(v).toLocaleString('en-IN')}</text><line x1="${pad.l}" y1="${sy(v)}" x2="${W-pad.r}" y2="${sy(v)}" stroke="#e3e8ef" stroke-width="0.5"/>`;}
+  $('priceChart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${yticks}${emaLines}${candles}${xlabels}</svg>`;
 }
-// ── END WATCHLISTS / TOOL HEALTH ─────────────────────────────────────────
+// period & EMA toggles
+document.querySelectorAll('#perSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#perSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  _chartPeriod=b.dataset.v;if(currentSym)loadPriceChart(currentSym);
+}));
+document.querySelectorAll('#emaSeg button').forEach(b=>b.addEventListener('click',()=>{
+  b.classList.toggle('on');
+  _emaActive[b.classList.contains('on')?'add':'delete'](b.dataset.e);
+  if(currentSym)loadPriceChart(currentSym);
+}));
+// period refresh
+document.querySelectorAll('#frSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#frSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  _stmtPeriod=b.dataset.v;if(currentSym)loadFundamentals(currentSym);
+}));
 
-// ── TAB SWITCHER (Scoring / Data) ────────────────────────────────────────
-function switchTab(t){
-  $('scoringView').style.display=t==='scoring'?'':'none';
-  $('dataView').style.display=t==='data'?'':'none';
-  $('tabScoring').classList.toggle('active',t==='scoring');
-  $('tabData').classList.toggle('active',t==='data');
-  if(t==='data'){loadDbStats();loadDataTab();}
-}
-
-// ── DATA STORE TAB ────────────────────────────────────────────────────────
-let _activeDataTab='fundamentals';
-
-async function loadDbStats(){
+async function loadFundamentals(sym){
+  $('fSt').textContent='Loading financial data…';
   try{
-    const d=await api('/api/data/stats');
-    const fmtRows=(n)=>n>=1e6?`${(n/1e6).toFixed(1)}M`:(n>=1e3?`${(n/1e3).toFixed(1)}k`:String(n));
-    const fmtSize=(b)=>b>=1e9?`${(b/1e9).toFixed(1)} GB`:(b>=1e6?`${(b/1e6).toFixed(0)} MB`:(b>=1e3?`${(b/1e3).toFixed(0)} KB`:'< 1 KB'));
-    const labels={fundamentals_q:'Fundamentals',news:'News',company_events:'Events',fii_dii_daily:'FII/DII',oi_snapshots:'OI Snapshots',runs:'Runs',run_agent_io:'Agent I/O',kv:'KV cache',watchlists:'Watchlists'};
-    $('dbStatsBar').innerHTML=Object.entries(labels).map(([k,l])=>`<div class="ds-stat"><small>${l}</small><b>${fmtRows(d[k]?.rows||0)}</b></div>`).join('')
-      +(d._db_size_bytes?`<div class="ds-stat" style="color:var(--accent)"><small>DB size</small><b>${fmtSize(d._db_size_bytes)}</b></div>`:'');
+    const [stmts,flags,val]=await Promise.all([
+      api(`/api/fundamentals/${sym}/statements?period_type=${_stmtPeriod}`),
+      api(`/api/fundamentals/${sym}/flags`),
+      api(`/api/fundamentals/${sym}/valuation`),
+    ]);
+    $('fSt').textContent=stmts.series_source?`Source: ${stmts.series_source}`:'';
+    renderHealthScore(flags);
+    renderValuation(val);
+    renderFinCharts(stmts);
+  }catch(e){$('fSt').textContent='Financial data error: '+e.message;}
+}
+function renderHealthScore(f){
+  const score=f.score??50;
+  const w=Math.round(score);
+  const barCol=w>=70?'var(--up)':w>=45?'var(--am)':'var(--dn)';
+  $('healthBox').innerHTML=`
+    <div style="font-size:38px;font-weight:800;letter-spacing:-1px;margin:10px 0 4px">${w}<span style="font-size:16px;font-weight:400">/100</span></div>
+    <div class="progbar" style="margin:6px 0 10px"><i style="width:${w}%;background:${barCol}"></i></div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${(f.flags||[]).map(fl=>`<span class="flag ${esc(fl.kind)}">${fl.kind==='good'?'✓':'✗'} ${esc(fl.text)}</span>`).join('')}</div>`;
+}
+function renderValuation(v){
+  const row=(l,x)=>x!=null?`<div style="min-width:110px"><div class="kpi-l">${l}</div><div style="font-size:18px;font-weight:700;margin-top:3px">${typeof x==='number'?x.toFixed(2):x}</div></div>`:'';
+  const pe=row('Trailing P/E',v.trailing_pe);
+  const fpe=row('Forward P/E',v.forward_pe);
+  const pb=row('P/B',v.price_to_book);
+  const roe=v.roe!=null?row('ROE',`${(v.roe*100).toFixed(2)}%`):row('ROE',null);
+  const div=v.dividend_yield!=null?row('Div Yield',`${(v.dividend_yield*100).toFixed(2)}%`):row('Div Yield',null);
+  $('valBox').innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px">${pe}${fpe}${pb}${roe}${div}</div>`;
+}
+function renderFinCharts(stmts){
+  const periods=stmts.periods||[];if(!periods.length){$('finCharts').innerHTML='<div class="empty hint">No financial statements stored. Run a scoring to import.</div>';return;}
+  const labels=periods.map(p=>p.label||p.period_end);
+  const pats=periods.map(p=>p.pat);const revs=periods.map(p=>p.revenue);const eps=periods.map(p=>p.eps);
+  $('finCharts').innerHTML=`
+    <div class="card">${miniBarChart('Revenue vs PAT (₹ cr)',labels,[{data:revs,col:'#3498db',name:'Revenue'},{data:pats,col:'#0e9f6e',name:'PAT'}])}</div>
+    <div class="card">${miniBarChart('EPS (₹)',labels,[{data:eps,col:'#9b59b6',name:'EPS'}])}</div>`;
+}
+function miniBarChart(title,labels,series){
+  const allVals=series.flatMap(s=>s.data).filter(v=>v!=null);
+  if(!allVals.length)return`<h2>${esc(title)}</h2><div class="empty">Provider did not return this metric</div>`;
+  const maxV=Math.max(...allVals.map(Math.abs))||1;
+  const H=140,barH=(v)=>Math.round((Math.abs(v||0)/maxV)*H*0.9);
+  const cols=labels.length;const bw=Math.floor(200/cols)-4;
+  const bars=labels.map((lbl,i)=>`<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+    ${series.map(s=>`<div style="width:${bw}px;height:${barH(s.data[i])}px;background:${s.col};border-radius:3px 3px 0 0" title="${s.name}: ${s.data[i]!=null?s.data[i].toFixed(0):'—'}"></div>`).join('')}
+    <div style="font-size:9px;color:var(--mu);writing-mode:vertical-rl;transform:rotate(180deg)">${esc(lbl)}</div>
+  </div>`).join('');
+  const legend=series.map(s=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px"><span style="width:8px;height:8px;border-radius:2px;background:${s.col};display:inline-block"></span>${s.name}</span>`).join(' ');
+  return`<h2>${esc(title)}</h2><div style="display:flex;align-items:flex-end;gap:4px;margin:12px 0 8px">${bars}</div><div style="display:flex;gap:10px">${legend}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCORING TAB — (ported from original, condensed)
+═══════════════════════════════════════════════════════════════ */
+let selected=new Set(),runs=[],activeRunId=null,_pollTimer=null;
+function filterStocks(){
+  const sec=$('sectorFilter').value,q=$('symSearch').value.trim().toUpperCase();
+  const vis=allStocks.filter(s=>(!sec||s.sub_sector===sec)&&(!q||s.symbol.includes(q)||s.company_name.toUpperCase().includes(q)));
+  $('stockList').innerHTML=vis.length?vis.map(x=>`<label class="stock-row"><input type="checkbox" data-symbol="${esc(x.symbol)}" ${selected.has(x.symbol)?'checked':''}><span><span class="stock-name">${esc(x.company_name||x.symbol)}</span><br><span class="stock-meta">${esc(x.sub_sector||'')}</span></span><span class="ticker">${esc(x.symbol)}</span></label>`).join(''):'<div class="empty hint">No stocks match.</div>';
+  $('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`;
+}
+$('stockList').addEventListener('change',e=>{const b=e.target.closest('input[data-symbol]');if(!b)return;b.checked?selected.add(b.dataset.symbol):selected.delete(b.dataset.symbol);$('selectionCount').textContent=`${selected.size} stock${selected.size===1?'':'s'} selected`;});
+function selectAll(v){allStocks.forEach(s=>v?selected.add(s.symbol):selected.delete(s.symbol));filterStocks();}
+
+async function loadUniverse(){
+  try{const d=await api('/api/universe');allStocks=(d.stocks||[]);
+    filterStocks();
+    $('syms').innerHTML=allStocks.map(s=>`<option value="${esc(s.symbol)} — ${esc(s.company_name||s.symbol)}">`).join('');
   }catch(e){}
 }
+async function checkHealth(){
+  try{const d=await api('/health');$('apiStatus').textContent='API online';$('apiStatus').className='chip ok';}
+  catch{$('apiStatus').textContent='API offline';$('apiStatus').className='chip err';}
+  try{const d=await api('/api/config');
+    $('fyChip').textContent=d.fyers_ready?'FYERS ready':'FYERS —';
+    $('fyChip').className='chip '+(d.fyers_ready?'ok':'warn');
+  }catch{}
+}
+async function loadModels(){
+  try{const d=await api('/api/models');const opts=d.models||[];
+    $('modelSelect').innerHTML='<option value="">Default model</option>'+opts.map(m=>`<option value="${esc(JSON.stringify(m))}">${esc(m.provider||'')} · ${esc(m.model_id||'')}</option>`).join('');
+  }catch{}
+}
+async function loadRuns(){
+  try{const d=await api('/api/runs?limit=20');runs=d.runs||[];renderRuns();}catch{}
+}
+function renderRuns(){
+  $('runList').innerHTML=runs.length?runs.map(r=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line);font-size:12px">
+    <button class="lk" onclick="selectRun('${esc(r.run_id)}')" style="font-size:11px;text-align:left;flex:1">${esc(r.run_id.slice(-8))} · ${esc(r.scope||'')} · ${esc((r.created_at||'').slice(0,16))}</button>
+    <span class="badge ${r.status==='done'?'b-up':r.status==='running'?'b-am':'b-dn'}">${esc(r.status||'?')}</span>
+  </div>`).join(''):'<div class="empty hint">No runs yet.</div>';
+}
+async function selectRun(rid){
+  activeRunId=rid;
+  try{const d=await api(`/api/runs/${rid}`);renderMatrix(d);renderResultsTable(d);}catch{}
+}
+function renderMatrix(d){
+  const rows=d.results||[];if(!rows.length){$('agentMatrix').innerHTML='<div class="empty hint">No agent data.</div>';return;}
+  const agents=['fundamental','industry','indicator','trader','rs_agent','quant_risk','promoter_intel','catalyst_quality','investment_trend','option_chain','decision_maker'];
+  const byKey={};rows.forEach(r=>{if(!byKey[r.symbol])byKey[r.symbol]={};byKey[r.symbol][r.agent]=r;});
+  const syms=Object.keys(byKey);
+  const thead='<tr><th>Symbol</th>'+agents.map(a=>`<th title="${esc(a)}">${esc(a.slice(0,4))}</th>`).join('')+'<th>Score</th></tr>';
+  const tbody=syms.map(sym=>{
+    const row=byKey[sym];const fin=rows.find(r=>r.symbol===sym&&r.agent==='decision_maker');
+    return`<tr><td class="sym">${esc(sym)}</td>`+agents.map(a=>{const ag=row[a];if(!ag)return'<td>—</td>';
+      const c=ag.status==='ok'?'c-ok':ag.status==='error'?'c-err':ag.status==='unavailable'?'c-skip':'c-wait';
+      return`<td class="${c}" title="${esc(a+': '+ag.status)}">${ag.score!=null?Number(ag.score).toFixed(1):(ag.status==='ok'?'ok':ag.status[0])}`;
+    }).join('')+`<td><b>${fin?.score!=null?Number(fin.score).toFixed(2):'—'}</b></td></tr>`;
+  }).join('');
+  $('agentMatrix').innerHTML=`<table class="agent-matrix"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  $('matrixMeta').textContent=`${syms.length} stocks`;
+}
+function renderResultsTable(d){
+  const results=d.results||[];
+  if(!results.length){$('resultsCard').style.display='none';return;}
+  $('resultsCard').style.display='';
+  const grouped={};results.forEach(r=>{if(!grouped[r.symbol])grouped[r.symbol]={};grouped[r.symbol][r.agent]=r;});
+  const dm_results=results.filter(r=>r.agent==='decision_maker').sort((a,b)=>(b.score||0)-(a.score||0));
+  $('resultsTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>#</th><th>Symbol</th><th class="num">Score</th><th>Direction</th><th>Status</th><th>Completeness</th><th>Chart</th></tr></thead><tbody>
+    ${dm_results.map((r,i)=>{const n=Number(r.score||0);return`<tr>
+      <td>${i+1}</td><td><button class="lk" onclick="gotoStock('${esc(r.symbol)}')">${esc(r.symbol)}</button></td>
+      <td class="num score-cell ${n>0?'positive':n<0?'negative':'neutral'}">${n.toFixed(2)}</td>
+      <td>${esc((grouped[r.symbol]?.decision_maker?.extra?.direction)||'—')}</td>
+      <td><span class="badge b-am">${esc(grouped[r.symbol]?.decision_maker?.extra?.trade_status||'—')}</span></td>
+      <td>${r.data_completeness!=null?Math.round(Number(r.data_completeness)*100)+'%':'—'}</td>
+      <td><a href="/api/chart/${esc(r.symbol)}/interactive" target="_blank" title="Interactive chart" style="font-size:17px">📊</a></td>
+    </tr>`;}).join('')}
+  </tbody></table></div>`;
+  updateTraceSymbols(Object.keys(grouped));
+}
+function updateTraceSymbols(syms){
+  $('traceSymbol').innerHTML='<option value="">Select symbol</option>'+(syms||[]).map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+}
+document.querySelectorAll('#resTab button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#resTab button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  $('resultsTable').style.display=b.dataset.t==='table'?'':'none';
+  $('tracePanel').style.display=b.dataset.t==='traces'?'':'none';
+}));
+$('traceSymbol').addEventListener('change',()=>{const ok=!!(activeRunId&&$('traceSymbol').value);$('loadTraces').disabled=!ok;$('showChart').disabled=!$('traceSymbol').value;});
+$('showChart').onclick=()=>{const s=$('traceSymbol').value;if(s)window.open('/api/chart/'+encodeURIComponent(s)+'/interactive','_blank','noreferrer');};
+$('loadTraces').onclick=async()=>{
+  const sym=$('traceSymbol').value;if(!sym||!activeRunId)return;
+  try{const d=await api(`/api/runs/${activeRunId}/traces?symbol=${sym}`);
+    $('traceContent').innerHTML=(d.agents||[]).map(a=>`<div class="card mt"><b>${esc(a.agent)}</b> <span class="badge ${a.status==='ok'?'b-up':'b-dn'}">${esc(a.status)}</span>${a.score!=null?` score ${Number(a.score).toFixed(2)}`:''}<pre style="white-space:pre-wrap;font-size:11px;margin-top:8px;color:var(--mu)">${esc((a.reasoning||'').slice(0,1200))}</pre></div>`).join('');
+  }catch(e){$('traceContent').innerHTML=`<div class="empty">${esc(e.message)}</div>`;}
+};
+$('exportMd').onclick=()=>{if(activeRunId)window.open(`/api/runs/${activeRunId}/export?fmt=md`,'_blank');};
+$('exportJson').onclick=()=>{if(activeRunId)window.open(`/api/runs/${activeRunId}/export?fmt=json`,'_blank');};
 
-function switchDataTab(tab){
-  _activeDataTab=tab;
-  document.querySelectorAll('[id^="dst-"]').forEach(b=>b.classList.remove('active'));
-  const el=$(`dst-${tab}`); if(el) el.classList.add('active');
-  // show/hide filters
-  const showSym=['fundamentals','events','oi','agentio'].includes(tab);
-  const showScope=['news'].includes(tab);
-  const showRunId=['agentio'].includes(tab);
-  $('dsSymbol').style.display=showSym?'':'none';
-  $('dsScope').style.display=showScope?'':'none';
-  $('dsRunId').style.display=showRunId?'':'none';
-  $('dsDays').style.display=(['fii','oi','news','events'].includes(tab))?'':'none';
-  loadDataTab();
+function renderTokens(t,p){
+  t=t||{};$('tokIn').textContent=fmt(t.input_tokens);$('tokOut').textContent=fmt(t.output_tokens);$('tokTotal').textContent=fmt(t.total_tokens);
+  const done=t.agents_done||0,total=t.agents_total||0;
+  $('progFill').style.width=(total?Math.round(done/total*100):0)+'%';
+  $('progAgents').textContent=`${done} / ${total} agent tasks done`;
+  $('progStocks').textContent=p?`${p.stocks_done||0}/${p.stocks_total||0} stocks`:'';
+  const elapsedSec=(t.elapsed_seconds||0);
+  $('runElapsed').textContent=elapsedSec>0?`${Math.floor(elapsedSec/60)}m ${Math.round(elapsedSec%60)}s`:'—';
+  const inp=t.input_tokens||0;const out=t.output_tokens||0;
+  $('tokReadRate').textContent=(elapsedSec>1)?fmt(Math.round(inp/elapsedSec)):'—';
+  $('tokGenRate').textContent=(elapsedSec>1)&&out?fmt(Math.round(out/elapsedSec)):'—';
+  const bm=t.by_model||{};
+  $('byModel').innerHTML=Object.keys(bm).map(k=>`<span class="chip" style="font-size:10px">${esc(k)} · ${fmt((bm[k].input_tokens||0)+(bm[k].output_tokens||0))} tok · ${bm[k].calls||0} calls</span>`).join('')||'';
 }
 
+/* start run */
+$('startRun').onclick=async()=>{
+  if(!selected.size){notice('Select at least one stock first.');return;}
+  const btn=$('startRun');btn.disabled=true;btn.innerHTML='<span class="loading"></span> Starting…';notice('',false);
+  try{
+    const mv=$('modelSelect').value;const mo=mv?JSON.parse(mv):null;
+    const ts=parseInt($('timeoutSelect').value)||300;
+    const runMode=document.querySelector('input[name="runMode"]:checked')?.value||'bulk';
+    const body={symbols:[...selected],stub:$('stub').checked,refresh:$('refresh').checked,force_refresh:$('forceRefresh').checked,mode:'inprocess',llm_provider:mo?.provider||'',llm_model:mo?.model||null,llm_timeout:ts,run_mode:runMode};
+    const d=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});
+    activeRunId=d.run_id;runs.unshift(d);renderRuns();
+    await selectRun(d.run_id);
+    pollRun(d.run_id);
+  }catch(e){notice('Could not start run: '+e.message);}
+  finally{btn.disabled=false;btn.textContent='▶ Start scoring run';}
+};
+
+function pollRun(rid){
+  clearInterval(_pollTimer);
+  _pollTimer=setInterval(async()=>{
+    try{
+      const d=await api(`/api/runs/${rid}`);
+      renderTokens(d.tokens||{},d.progress||{});
+      if(d.status==='done'||d.status==='failed'){clearInterval(_pollTimer);renderMatrix(d);renderResultsTable(d);loadRuns();}
+    }catch{clearInterval(_pollTimer);}
+  },2500);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DATA STORE TAB
+═══════════════════════════════════════════════════════════════ */
+let _activeDataTab='fundamentals';
+async function loadDbStats(){
+  try{const d=await api('/api/data/stats');
+    const fmtN=n=>n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1e3?`${(n/1e3).toFixed(0)}k`:String(n);
+    const fmtSz=b=>b>=1e9?`${(b/1e9).toFixed(1)}GB`:b>=1e6?`${(b/1e6).toFixed(0)}MB`:b>=1e3?`${(b/1e3).toFixed(0)}KB`:'<1KB';
+    const labs={fundamentals_q:'Fundamentals',news:'News',company_events:'Events',fii_dii_daily:'FII/DII',oi_snapshots:'OI',runs:'Runs',run_agent_io:'Agent I/O',kv:'KV cache',watchlists:'Watchlists'};
+    $('dbStatsBar').innerHTML=Object.entries(labs).map(([k,l])=>`<div class="ds-stat"><small>${l}</small><b>${fmtN(d[k]?.rows||0)}</b></div>`).join('')
+      +(d._db_size_bytes?`<div class="ds-stat" style="color:var(--ac)"><small>DB size</small><b>${fmtSz(d._db_size_bytes)}</b></div>`:'');
+  }catch{}
+}
+function switchDataSubtab(t){
+  _activeDataTab=t;
+  document.querySelectorAll('#dataSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  $('dsSymbol').style.display=['fundamentals','events','oi','agentio'].includes(t)?'':'none';
+  $('dsScope').style.display=t==='news'?'':'none';
+  $('dsRunId').style.display=t==='agentio'?'':'none';
+  $('dsDays').style.display=['fii','oi','news','events'].includes(t)?'':'none';
+  loadDataTab();
+}
+document.querySelectorAll('#dataSeg button').forEach(b=>b.addEventListener('click',()=>switchDataSubtab(b.dataset.t)));
 async function loadDataTab(){
   const tab=_activeDataTab;
   const sym=($('dsSymbol').value||'').trim().toUpperCase();
@@ -522,67 +944,88 @@ async function loadDataTab(){
   const days=parseInt($('dsDays').value)||30;
   $('dataTableWrap').innerHTML='<div class="hint" style="padding:20px">Loading…</div>';
   try{
-    let d, cols, rows;
-    if(tab==='fundamentals'){
-      d=await api(`/api/data/fundamentals?limit=300${sym?'&symbol='+sym:''}`);
-      cols=[['symbol','Symbol'],['period_end','Period'],['basis','Basis'],['source','Source'],['revenue','Revenue cr'],['op_profit','PPOP cr'],['pbt','PBT cr'],['pat','PAT cr'],['eps','EPS'],['reported_on','Reported']];
-    }else if(tab==='news'){
-      d=await api(`/api/data/news?days=${days}&limit=300${scope?'&scope='+encodeURIComponent(scope):''}`);
-      cols=[['scope','Scope'],['title','Headline'],['publisher','Publisher'],['published_at','Published']];
-    }else if(tab==='events'){
-      d=await api(`/api/data/events?days=${days}&limit=300${sym?'&symbol='+sym:''}`);
-      cols=[['symbol','Symbol'],['event_date','Date'],['event_type','Type'],['event_summary','Summary'],['announcement_date','Announced']];
-    }else if(tab==='fii'){
-      d=await api(`/api/data/fii_dii?days=${days}`);
-      cols=[['day','Day'],['category','Category'],['buy_cr','Buy cr'],['sell_cr','Sell cr'],['net_cr','Net cr'],['fetched_at','Fetched']];
-    }else if(tab==='oi'){
-      d=await api(`/api/data/oi_snapshots?days=${days}&limit=300${sym?'&symbol='+sym:''}`);
-      cols=[['symbol','Symbol'],['captured_at','Captured'],['ltp','LTP'],['call_oi','Call OI'],['put_oi','Put OI'],['pcr','PCR'],['max_pain','Max Pain']];
-    }else if(tab==='runs'){
-      d=await api('/api/data/runs?limit=100');
-      cols=[['run_id','Run ID'],['as_of','As-of'],['created_at','Created'],['n_stocks','Stocks'],['scope','Scope']];
-    }else if(tab==='agentio'){
-      const qs=`?limit=200${runId?'&run_id='+encodeURIComponent(runId):''}${sym?'&symbol='+sym:''}`;
-      d=await api(`/api/data/agent_io${qs}`);
-      cols=[['run_id','Run ID'],['symbol','Symbol'],['agent','Agent'],['status','Status'],['score','Score'],['confidence','Conf'],['provider','Provider'],['model','Model'],['reason','Reasoning'],['created_at','Created']];
-    }
-    rows=d.rows||[];
-    $('dsCount').textContent=`${rows.length} rows`;
-    if(!rows.length){$('dataTableWrap').innerHTML='<div class="empty hint" style="padding:20px">No data for this filter.</div>';return;}
-    const thead='<tr>'+cols.map(([,h])=>`<th>${h}</th>`).join('')+'</tr>';
-    const tbody=rows.map(r=>'<tr>'+cols.map(([k])=>{
-      let v=r[k];
-      if(v==null)return'<td>—</td>';
-      if(typeof v==='number'){
-        if(k==='score') return`<td class="score-cell ${v>0?'pos':v<0?'neg':'neu'}">${v.toFixed(2)}</td>`;
-        if(k==='confidence') return`<td>${(v*100).toFixed(0)}%</td>`;
-        if(['call_oi','put_oi','buy_cr','sell_cr','net_cr','revenue','op_profit','pbt','pat'].includes(k))
-          return`<td style="text-align:right">${Number(v).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>`;
-        return`<td style="text-align:right">${Number.isInteger(v)?v:Number(v).toFixed(2)}</td>`;
-      }
-      const s=String(v);
-      // truncate long strings; show full on hover
-      const disp=s.length>60?s.slice(0,60)+'…':s;
-      return`<td title="${escapeHtml(s)}">${escapeHtml(disp)}</td>`;
+    let d,cols;
+    if(tab==='fundamentals'){d=await api(`/api/data/fundamentals?limit=300${sym?'&symbol='+sym:''}`);cols=[['symbol','Symbol'],['period_end','Period'],['basis','Basis'],['pat','PAT cr'],['revenue','Revenue cr'],['eps','EPS'],['reported_on','Reported']];}
+    else if(tab==='news'){d=await api(`/api/data/news?days=${days}&limit=300${scope?'&scope='+encodeURIComponent(scope):''}`);cols=[['scope','Scope'],['title','Headline'],['publisher','Publisher'],['published_at','Published']];}
+    else if(tab==='events'){d=await api(`/api/data/events?days=${days}&limit=300${sym?'&symbol='+sym:''}`);cols=[['symbol','Symbol'],['event_date','Date'],['event_type','Type'],['event_summary','Summary']];}
+    else if(tab==='fii'){d=await api(`/api/data/fii_dii?days=${days}`);cols=[['day','Day'],['category','Cat'],['buy_cr','Buy ₹cr'],['sell_cr','Sell ₹cr'],['net_cr','Net ₹cr']];}
+    else if(tab==='oi'){d=await api(`/api/data/oi_snapshots?days=${days}&limit=200${sym?'&symbol='+sym:''}`);cols=[['symbol','Symbol'],['captured_at','Captured'],['ltp','LTP'],['pcr','PCR'],['max_pain','Max Pain']];}
+    else if(tab==='runs'){d=await api('/api/data/runs?limit=100');cols=[['run_id','Run ID'],['created_at','Created'],['n_stocks','Stocks'],['scope','Scope']];}
+    else if(tab==='agentio'){const qs=`?limit=200${runId?'&run_id='+encodeURIComponent(runId):''}${sym?'&symbol='+sym:''}`;d=await api(`/api/data/agent_io${qs}`);cols=[['run_id','Run'],['symbol','Sym'],['agent','Agent'],['status','Status'],['score','Score'],['model','Model'],['reason','Reasoning']];}
+    const rows=d.rows||[];$('dsCount').textContent=`${rows.length} rows`;
+    if(!rows.length){$('dataTableWrap').innerHTML='<div class="empty hint">No data.</div>';return;}
+    const th=cols.map(([,h])=>`<th>${h}</th>`).join('');
+    const tb=rows.map(r=>'<tr>'+cols.map(([k])=>{let v=r[k];if(v==null)return'<td>—</td>';
+      if(typeof v==='number'){if(k==='score')return`<td class="num score-cell ${v>0?'positive':v<0?'negative':'neutral'}">${v.toFixed(2)}</td>`;
+        return`<td class="num">${Number(v).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>`;}
+      const s=String(v);return`<td title="${esc(s)}">${esc(s.length>55?s.slice(0,55)+'…':s)}</td>`;
     }).join('')+'</tr>').join('');
-    $('dataTableWrap').innerHTML=`<table class="ds-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
-  }catch(e){$('dataTableWrap').innerHTML=`<div class="empty hint" style="padding:20px">Error: ${escapeHtml(e.message)}</div>`;}
+    $('dataTableWrap').innerHTML=`<table class="ds-table"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`;
+  }catch(e){$('dataTableWrap').innerHTML=`<div class="empty">${esc(e.message)}</div>`;}
 }
-
 async function runPrune(){
-  const news=parseInt($('pruneNewsDays').value)||90;
-  const runs=parseInt($('pruneRunsKeep').value)||100;
-  if(!confirm(`Prune:\n• News older than ${news} days\n• Events older than 180 days\n• OI snapshots older than 60 days\n• Agent I/O beyond last ${runs} runs\n\nThis cannot be undone.`)) return;
+  const nd=parseInt($('pruneNewsDays').value)||90,rk=parseInt($('pruneRunsKeep').value)||100;
+  if(!confirm(`Prune news older than ${nd}d + keep last ${rk} runs' agent I/O?`))return;
   $('pruneBtn').disabled=true;$('pruneBtn').textContent='Pruning…';
-  try{
-    const d=await api(`/api/admin/prune?news_days=${news}&runs_keep=${runs}`,{method:'POST'});
-    const total=Object.values(d.pruned||{}).reduce((a,n)=>a+n,0);
-    alert(`Pruned ${total} rows total.\n${JSON.stringify(d.pruned,null,2)}`);
-    loadDbStats(); loadDataTab();
-  }catch(e){alert('Prune failed: '+e.message);}
-  finally{$('pruneBtn').disabled=false;$('pruneBtn').textContent='🗑 Prune DB';}
+  try{const d=await api(`/api/admin/prune?news_days=${nd}&runs_keep=${rk}`,{method:'POST'});
+    const tot=Object.values(d.pruned||{}).reduce((a,n)=>a+n,0);
+    alert(`Pruned ${tot} rows.\n${JSON.stringify(d.pruned,null,2)}`);
+    loadDbStats();loadDataTab();
+  }catch(e){alert('Error: '+e.message);}
+  finally{$('pruneBtn').disabled=false;$('pruneBtn').textContent='🗑 Prune';}
 }
-// ── END DATA STORE TAB ────────────────────────────────────────────────────
 
-(async()=>{Promise.all([checkHealth(),loadUniverse(),loadRuns(),loadModels()])})();
-</script></body></html>
+/* ══════════════════════════════════════════════════════════════
+   WATCHLISTS
+═══════════════════════════════════════════════════════════════ */
+let _wlOpen=false;
+function toggleWatchlist(){_wlOpen=!_wlOpen;$('watchlistPanel').style.transform=_wlOpen?'translateX(0)':'translateX(100%)';if(_wlOpen)loadWatchlists();}
+async function loadWatchlists(){
+  try{const d=await api('/api/watchlists');const wls=d.watchlists||{};
+    const names=Object.keys(wls);const cur=$('wlActiveList').value;
+    $('wlActiveList').innerHTML='<option value="">— pick list —</option>'+names.map(n=>`<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)} (${wls[n].length})</option>`).join('');
+    $('runWatchlist').disabled=!cur||!(wls[cur]?.length);
+    $('wlContent').innerHTML=names.length?names.map(nm=>{const syms=wls[nm]||[];
+      return`<div style="padding:8px 14px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <b style="font-size:12px">${esc(nm)}</b>
+          <div style="display:flex;gap:4px">
+            <button class="sm" onclick="selectWatchlistSymbols('${esc(nm)}')" style="font-size:10px;padding:3px 7px">▶</button>
+            <button class="sm" onclick="deleteWatchlist('${esc(nm)}')" style="font-size:10px;padding:3px 7px;color:var(--dn)">✕</button>
+          </div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${syms.map(s=>`<span style="background:var(--acs);color:var(--ac);border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:monospace" onclick="removeFromWatchlist('${esc(nm)}','${esc(s)}')" title="Remove">${esc(s)} ×</span>`).join('')}</div>
+      </div>`;}).join(''):'<div class="empty hint" style="padding:12px">No watchlists yet.</div>';
+  }catch{}
+}
+$('wlActiveList').addEventListener('change',loadWatchlists);
+async function createWatchlist(){const n=$('wlNewName').value.trim();if(!n)return;await api(`/api/watchlists/${encodeURIComponent(n)}`,{method:'POST',body:JSON.stringify({symbols:[]})});$('wlNewName').value='';loadWatchlists();}
+async function addSelectedToWatchlist(){const n=$('wlActiveList').value;if(!n){notice('Pick a watchlist');return;}if(!selected.size){notice('Select stocks first');return;}await api(`/api/watchlists/${encodeURIComponent(n)}`,{method:'POST',body:JSON.stringify({symbols:[...selected]})});loadWatchlists();}
+async function removeFromWatchlist(nm,sym){await api(`/api/watchlists/${encodeURIComponent(nm)}?symbol=${encodeURIComponent(sym)}`,{method:'DELETE'});loadWatchlists();}
+async function deleteWatchlist(nm){if(!confirm(`Delete "${nm}"?`))return;await api(`/api/watchlists/${encodeURIComponent(nm)}`,{method:'DELETE'});loadWatchlists();}
+function selectWatchlistSymbols(nm){api('/api/watchlists').then(d=>{(d.watchlists||{})[nm]?.forEach(s=>selected.add(s));filterStocks();notice(`Added ${((d.watchlists||{})[nm]||[]).length} stocks from "${nm}"`,false);toggleWatchlist();});}
+function runFromWatchlist(){const n=$('wlActiveList').value;if(!n)return;api('/api/watchlists').then(d=>{const syms=(d.watchlists||{})[n]||[];syms.forEach(s=>selected.add(s));filterStocks();$('startRun').click();});}
+
+/* ══════════════════════════════════════════════════════════════
+   TOOL HEALTH
+═══════════════════════════════════════════════════════════════ */
+let _thOpen=false;
+function toggleToolHealth(){_thOpen=!_thOpen;$('toolHealthDrawer').style.display=_thOpen?'block':'none';if(_thOpen)loadToolHealth();}
+async function loadToolHealth(){
+  $('toolHealthGrid').innerHTML='<div class="hint">Checking…</div>';
+  try{const d=await api('/api/health/tools');const tools=d.tools||{};
+    const col={green:'#0e9f6e',yellow:'#c27c0e',red:'#e5484d'};
+    $('toolHealthGrid').innerHTML=Object.entries(tools).map(([nm,t])=>`
+      <div style="background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:center">
+        <span style="width:10px;height:10px;border-radius:50%;background:${col[t.status]||'#888'};flex-shrink:0"></span>
+        <div><div style="font-size:12px;font-weight:600">${esc(nm)}</div><div class="hint">${esc(t.note||'')}</div></div>
+      </div>`).join('');
+  }catch(e){$('toolHealthGrid').innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`;}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════════════════════ */
+(async()=>{await Promise.all([checkHealth(),loadUniverse(),loadRuns(),loadModels()]);})();
+</script>
+</body>
+</html>

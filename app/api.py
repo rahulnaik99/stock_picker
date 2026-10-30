@@ -56,6 +56,10 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
+# Market + Stock browse tab routes (price-history, movers, statements, flags, valuation)
+from app.market_api import router as _market_router  # noqa: E402
+app.include_router(_market_router)
+
 
 class RunRequest(BaseModel):
     symbols: list[str] | None = Field(default=None, description="Optional symbols from the configured universe, e.g. ['SBIN', 'HDFCBANK']")
