@@ -34,12 +34,13 @@ SPECIALISTS = {
 
 async def run(symbol: str, meta: dict[str, Any], client: ToolClient, as_of: str | None, technical_weights: dict[str, float]) -> dict[str, AgentResult]:
     async def one(key: str, mod) -> AgentResult:
+        from app.graph.builder import _run_with_retry  # lazy import to avoid circular at module-load time
         with log_context(agent=key):
             progress.agent_start(key)
-            try:
-                r = await mod.run(symbol, meta, client.for_agent(mod.TOOLS), as_of)
-            except Exception as exc:  # noqa: BLE001 - one specialist must not sink the stock
-                r = AgentResult(agent=key, symbol=symbol, status="error", reasoning=f"{type(exc).__name__}: {exc}")
+            # Each technical specialist retries once; optional agents (all technical) never skip the stock.
+            r = await _run_with_retry(
+                lambda: mod.run(symbol, meta, client.for_agent(mod.TOOLS), as_of),
+                key, symbol)
             progress.agent_finish(key, status="done" if r.status == "ok" else r.status, score=r.score,
                                   error=None if r.status == "ok" else r.reasoning[:200])
             return r

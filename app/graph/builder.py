@@ -15,7 +15,7 @@ no streaming), so we orchestrate it directly. The returned object keeps the hist
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Callable, Awaitable
 
 from app.Agents.DecisionMaker import agent as decision_maker
 from app.Agents.Fundamental import agent as fundamental
@@ -31,6 +31,39 @@ from app.service.logger import get_logger, log_context
 
 log = get_logger(__name__)
 
+# Required agents: if both attempts fail, the stock is skipped (saves running the remaining
+# agents whose output would be discarded by the INSUFFICIENT_DATA gate anyway).
+_REQUIRED_AGENTS = frozenset({"fundamental", "industry", "indicator"})
+
+
+async def _run_with_retry(
+    factory: Callable[[], Awaitable[Any]],
+    agent_name: str,
+    symbol: str,
+    retry_delay: float = 2.0,
+) -> Any:
+    """Run `factory()` once; on exception wait and try once more.
+    If the second attempt also fails:
+    - required agents (fundamental/industry/indicator) → re-raise so the whole stock is skipped.
+    - optional agents → return an error AgentResult so scoring can continue with partial data."""
+    from app.schemas import AgentResult  # lazy to avoid circular at module level
+    try:
+        return await factory()
+    except Exception as first_exc:  # noqa: BLE001
+        log.warning("%s %s failed (attempt 1): %s — retrying in %.0fs",
+                    agent_name, symbol, type(first_exc).__name__, retry_delay)
+        await asyncio.sleep(retry_delay)
+        try:
+            return await factory()
+        except Exception as second_exc:  # noqa: BLE001
+            msg = (f"{agent_name} failed on both attempts — "
+                   f"attempt1: {type(first_exc).__name__}: {first_exc} | "
+                   f"attempt2: {type(second_exc).__name__}: {second_exc}")
+            log.error("%s %s — %s", agent_name, symbol, msg[:300])
+            if agent_name in _REQUIRED_AGENTS:
+                raise RuntimeError(msg) from second_exc  # → stock skipped in runner.py
+            return AgentResult(agent=agent_name, symbol=symbol, status="error", reasoning=msg[:300])
+
 
 class _StockGraph:
     """Plain-asyncio stand-in for the old compiled LangGraph. Exposes `.ainvoke(state)`."""
@@ -43,37 +76,31 @@ class _StockGraph:
             "indicator", "trader", "rs_agent", "quant_risk",
             "promoter_intel", "catalyst_quality", "investment_trend", "option_chain")}
 
-    # ── branch 1: fundamental ──────────────────────────────────────────────
+    # ── branch 1: fundamental (retry-once on failure) ─────────────────────
     async def _fundamental(self, state: dict[str, Any]) -> dict[str, AgentResult]:
         with log_context(agent="fundamental"):
             progress.agent_start("fundamental")
-            try:
-                r = await fundamental.run(state["symbol"], state["meta"],
-                                          self.client.for_agent(fundamental.TOOLS), state["as_of"], self.ledger)
-            except Exception as exc:  # noqa: BLE001
-                log.exception("fundamental failed")
-                r = AgentResult(agent="fundamental", symbol=state["symbol"], status="error",
-                                reasoning=f"{type(exc).__name__}: {exc}")
-            progress.agent_finish("fundamental", status="done" if r.status == "ok" else r.status, score=r.score,
-                                  error=None if r.status == "ok" else r.reasoning[:200])
+            sym = state["symbol"]
+            r = await _run_with_retry(
+                lambda: fundamental.run(sym, state["meta"], self.client.for_agent(fundamental.TOOLS), state["as_of"], self.ledger),
+                "fundamental", sym)
+            progress.agent_finish("fundamental", status="done" if r.status == "ok" else r.status,
+                                  score=r.score, error=None if r.status == "ok" else r.reasoning[:200])
         return {"fundamental": r}
 
-    # ── branch 2: industry ─────────────────────────────────────────────────
+    # ── branch 2: industry (retry-once on failure) ─────────────────────────
     async def _industry(self, state: dict[str, Any]) -> dict[str, AgentResult]:
         with log_context(agent="industry"):
             progress.agent_start("industry")
-            try:
-                r = await industry.run(state["symbol"], state["meta"],
-                                       self.client.for_agent(industry.TOOLS), state["as_of"])
-            except Exception as exc:  # noqa: BLE001
-                log.exception("industry failed")
-                r = AgentResult(agent="industry", symbol=state["symbol"], status="error",
-                                reasoning=f"{type(exc).__name__}: {exc}")
-            progress.agent_finish("industry", status="done" if r.status == "ok" else r.status, score=r.score,
-                                  error=None if r.status == "ok" else r.reasoning[:200])
+            sym = state["symbol"]
+            r = await _run_with_retry(
+                lambda: industry.run(sym, state["meta"], self.client.for_agent(industry.TOOLS), state["as_of"]),
+                "industry", sym)
+            progress.agent_finish("industry", status="done" if r.status == "ok" else r.status,
+                                  score=r.score, error=None if r.status == "ok" else r.reasoning[:200])
         return {"industry": r}
 
-    # ── branch 3: technical (8 specialists run concurrently inside) ─────────
+    # ── branch 3: technical (8 specialists; each retried once internally) ──
     async def _technical(self, state: dict[str, Any]) -> dict[str, AgentResult]:
         res = await technical.run(state["symbol"], state["meta"], self.client, state["as_of"], self.tech_weights)
         log.info("technical consolidated score = %s",

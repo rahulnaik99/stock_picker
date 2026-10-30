@@ -194,9 +194,38 @@ def _divergence_signal(lt_trend: str | None, st_trend: str | None) -> dict[str, 
 
 def horizon_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Long-term (last 3 complete fiscal years, Apr-Mar) and short-term (last 3 quarters) views of the series.
-    Fiscal year of a quarter ending month m, year y = y if m <= 3 else y+1 (so Jun/Sep/Dec/Mar roll into one FY)."""
+    Fiscal year of a quarter ending month m, year y = y if m <= 3 else y+1 (so Jun/Sep/Dec/Mar roll into one FY).
+
+    EPS split-adjustment: Indian companies sometimes change face value mid-series, causing a step-change in
+    reported EPS (e.g. CANBK ₹10→₹2 FV → apparent 5× EPS drop from one quarter to the next).
+    We detect the largest single-step EPS drop in the series and, if it looks like a split (ratio is a round
+    2× / 5× / 10× factor and it is not matched by a similar PAT drop), we scale all earlier quarters' EPS
+    down to the current face value before aggregating. PAT-based metrics are unaffected."""
     if not rows:
         return {"long_term_3y": None, "short_term_3q": None}
+
+    # ── EPS split detection and normalisation ──────────────────────────────
+    eps_vals = [r.get("eps") for r in rows if r.get("eps") and r.get("eps") > 0]
+    split_ratios: list[tuple[int, float]] = []  # (row_index after split, ratio)
+    for i in range(1, len(rows)):
+        a, b = rows[i - 1].get("eps"), rows[i].get("eps")
+        if not (a and b and a > 0 and b > 0):
+            continue
+        ratio = a / b
+        # A genuine stock split / face-value change produces a sharp step that's a round factor
+        # AND the PAT in the same quarter does NOT drop by the same ratio.
+        pat_a, pat_b = rows[i - 1].get("pat"), rows[i].get("pat")
+        if ratio > 1.5 and any(abs(ratio - f) < 0.25 for f in (2, 4, 5, 10)):
+            pat_drop = (pat_a / pat_b) if pat_a and pat_b and pat_b > 0 else 1.0
+            if pat_drop < 1.3:   # PAT did not drop proportionally → it's a split, not a real EPS collapse
+                split_ratios.append((i, ratio))
+    # Apply the first detected split: scale all rows before the split point down
+    rows = [dict(r) for r in rows]  # make mutable copies
+    for split_idx, ratio in split_ratios:
+        for i in range(split_idx):
+            if rows[i].get("eps") is not None:
+                rows[i]["eps"] = round(rows[i]["eps"] / ratio, 4)
+
     fy: dict[int, list[dict[str, Any]]] = {}
     for r in rows:
         d = date.fromisoformat(r["period_end"])

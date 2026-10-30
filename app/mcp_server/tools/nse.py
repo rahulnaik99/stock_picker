@@ -312,34 +312,66 @@ def nse_shareholding(symbol: str) -> dict[str, Any]:
 def nse_promoter_pledge(symbol: str) -> dict[str, Any]:
     """STOCK-SPECIFIC promoter pledging data from NSE filings.
     Returns quarterly pledge %, trend (rising/falling/stable) and the latest raw rows.
-    Pledge > 30% = caution; pledge > 50% = high risk; falling pledge = positive signal."""
+    Pledge > 30% = caution; pledge > 50% = high risk; falling pledge = positive signal.
+
+    Short-circuits for GoI-held PSU banks (promoter = Government of India) which never pledge —
+    avoids a guaranteed 404 on every PSU stock in the universe.
+    NSE pledge endpoint tried in order: corporateShares-pldg → corporatePledgeData (legacy)."""
     src = "nse_promoter_pledge"
     sym = clean_symbol(symbol)
+
+    # ── GoI-owned PSU banks: government doesn't pledge shares → skip the HTTP round-trip ──
+    _GOI_PSU_BANKS = {
+        "SBIN", "PNB", "BANKBARODA", "BANKINDIA", "CANBK", "UNIONBANK", "INDIANB",
+        "MAHABANK", "CENTRALBK", "IOB", "UCOBANK", "IDBI",
+    }
+    if sym in _GOI_PSU_BANKS:
+        return ok(src, {
+            "latest_pledge_pct": 0.0, "trend": "stable", "risk": "low",
+            "quarters": [],
+            "note": "GoI is the promoter (PSU bank). Government of India does not pledge shares — "
+                    "pledge risk is structurally zero. Monitor GoI divestment events instead.",
+        }, symbol=sym, scope="stock_specific", skipped_reason="GoI_promoter_no_pledge")
+
     ref = f"{BASE}/get-quote/equity/{sym}"
-    try:
-        rows = _rows(nse_get("/api/corporatePledgeData",
-                             {"index": "equities", "symbol": sym, "type": "quarterly"}, referer=ref))
-        if not rows:
-            return unavailable(src, f"no pledging data for {sym} (may not be an F&O stock or pledging not disclosed)")
-        keep = ("pledgeDate", "quarter", "promotersPledgedShares", "percentOfTotalShares",
-                "percentOfPromotersHoldings", "totPromoterShares")
-        cleaned = [{k: r.get(k) for k in keep if k in r} for r in rows[:8]]
-        # Trend: compare latest quarter pledge % to oldest available
-        pcts = []
-        for r in cleaned:
-            v = r.get("percentOfPromotersHoldings") or r.get("percentOfTotalShares")
-            try:
-                pcts.append(float(str(v).replace("%", "").strip()))
-            except (TypeError, ValueError):
-                pass
-        latest_pledge = pcts[0] if pcts else None
-        trend = ("rising" if len(pcts) >= 2 and pcts[0] > pcts[-1] + 2 else
-                 "falling" if len(pcts) >= 2 and pcts[0] < pcts[-1] - 2 else "stable")
-        risk = ("high" if latest_pledge and latest_pledge > 50 else
-                "caution" if latest_pledge and latest_pledge > 25 else "low")
-        return ok(src, {"latest_pledge_pct": latest_pledge, "trend": trend, "risk": risk,
-                        "quarters": cleaned,
-                        "note": "pledge_pct is % of PROMOTER holdings pledged. >30%=caution; >50%=high risk."},
-                  symbol=sym, scope="stock_specific")
-    except Exception as exc:  # noqa: BLE001
-        return error(src, exc)
+    # Try the current NSE path first, then the older legacy path
+    _PLEDGE_PATHS = [
+        ("/api/corporate-share-holdings-pldg", {"symbol": sym}),
+        ("/api/corporatePledgeData",            {"index": "equities", "symbol": sym, "type": "quarterly"}),
+    ]
+    rows: list[dict] = []
+    last_exc: str = ""
+    for path, params in _PLEDGE_PATHS:
+        try:
+            rows = _rows(nse_get(path, params, referer=ref))
+            if rows:
+                break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = str(exc)[:120]
+            continue
+
+    if not rows:
+        msg = f"no pledging data for {sym} (both NSE pledge endpoints returned empty/404)"
+        if last_exc:
+            msg += f" — last error: {last_exc}"
+        return unavailable(src, msg)
+
+    keep = ("pledgeDate", "quarter", "promotersPledgedShares", "percentOfTotalShares",
+            "percentOfPromotersHoldings", "totPromoterShares")
+    cleaned = [{k: r.get(k) for k in keep if k in r} for r in rows[:8]]
+    pcts: list[float] = []
+    for r in cleaned:
+        v = r.get("percentOfPromotersHoldings") or r.get("percentOfTotalShares")
+        try:
+            pcts.append(float(str(v).replace("%", "").strip()))
+        except (TypeError, ValueError):
+            pass
+    latest_pledge = pcts[0] if pcts else None
+    trend = ("rising"  if len(pcts) >= 2 and pcts[0] > pcts[-1] + 2 else
+             "falling" if len(pcts) >= 2 and pcts[0] < pcts[-1] - 2 else "stable")
+    risk  = ("high"    if latest_pledge and latest_pledge > 50 else
+             "caution" if latest_pledge and latest_pledge > 25 else "low")
+    return ok(src, {"latest_pledge_pct": latest_pledge, "trend": trend, "risk": risk,
+                    "quarters": cleaned,
+                    "note": "pledge_pct = % of PROMOTER holdings pledged. >30% caution; >50% high risk."},
+              symbol=sym, scope="stock_specific")

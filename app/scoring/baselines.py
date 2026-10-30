@@ -272,8 +272,9 @@ def quant_risk_baseline(risk_data: dict[str, Any] | None) -> tuple[float, dict[s
     rl = risk_data.get("risk_level", "medium")
     # High risk stocks: slight bearish nudge (harder to hold through volatility)
     parts["risk_level"] = {"low": 0.5, "medium": 0.0, "high": -0.5}.get(rl, 0.0)
-    if isinstance(beta, (int, float)):
-        # Extreme beta = position sizing concern; doesn't change direction
+    # Only let beta nudge the score when it is RELIABLE — an unreliable near-zero beta is a
+    # data-alignment artifact (too few overlapping days) and must not be read as "defensive".
+    if isinstance(beta, (int, float)) and risk_data.get("beta_reliable"):
         parts["beta_extreme"] = 0.0 if 0.7 <= beta <= 1.5 else (-0.3 if beta > 1.5 else 0.2)
     return _clamp(sum(parts.values()), -1, 1), parts
 

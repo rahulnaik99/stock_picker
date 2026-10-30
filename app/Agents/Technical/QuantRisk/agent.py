@@ -18,7 +18,7 @@ async def run(symbol: str, meta: dict[str, Any], tools: AgentTools, as_of: str |
     base, parts = baselines.quant_risk_baseline(data)
     res = await analyze(agent=NAME, llm_key=NAME, symbol=symbol, system_prompt=load_prompt(__file__),
                         evidence={"risk": data}, tool_results=results,
-                        context={**meta, "as_of": as_of}, baseline=base)
+                        context={**meta, "as_of": as_of}, baseline=base, max_adjust=1.0)
     if res.status == "ok":
         res.extra.update({"beta": data.get("beta_vs_nifty"), "risk_level": data.get("risk_level"),
                           "max_dd_3m": (data.get("max_drawdown_pct") or {}).get("3m"),

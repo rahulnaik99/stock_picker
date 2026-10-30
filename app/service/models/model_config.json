@@ -1,51 +1,64 @@
 {
+  "_comment": "Benchmarked on CANBK across 6 local models (see LLM_runs analysis). nemotron-bolt-e4b-16k won the Decision Maker outright, tied qwen3-30b on fundamental/trader, cited real numbers, completed 11/11, and is small enough to stay resident in RAM so the 10 concurrent agents never trigger an Ollama model swap. That makes it the best + most reliable single-model choice. 32GB+ RAM users wanting max depth can replace every 'model' value with 'qwen3-30b-a3b-16k:latest' (ranked #1 overall) - it is a 3B-active MoE so inference stays fast, it just needs ~18GB resident.",
+
   "default": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "fundamental": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "industry": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "indicator": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.1
   },
   "trader": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "rs_agent": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.1
   },
   "quant_risk": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.1
   },
   "promoter_intel": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "catalyst_quality": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "trend_flow": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.2
   },
   "option_chain": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k"
+    "model": "nemotron-bolt-e4b-16k",
+    "temperature": 0.1
   },
   "decision_maker": {
     "provider": "ollama",
-    "model": "nemotron-e4b-16k",
+    "model": "nemotron-bolt-e4b-16k",
     "temperature": 0.0
   }
 }

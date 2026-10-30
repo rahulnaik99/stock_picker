@@ -400,6 +400,90 @@ async def list_available_models() -> dict[str, Any]:
 
 
 
+@app.get("/api/chart/{symbol}/interactive", tags=["charts"])
+async def get_interactive_chart(
+    symbol: str,
+    lookback: int = Query(default=365, ge=60, le=900),
+) -> Response:
+    """TradingView-style interactive HTML chart: candlesticks + zones + EMAs + events + quarterly PAT + bank KPIs.
+    Opens directly in the browser with full zoom/pan/hover.  No server after initial load."""
+    sym = "".join(c for c in symbol.upper() if c.isalnum())
+    if not sym:
+        raise HTTPException(status_code=400, detail="Invalid symbol")
+    try:
+        from app.mcp_server.tools import indicators
+        from app.viz.interactive_chart import plot_interactive_html
+        import pandas as pd
+
+        # ── daily candles ──────────────────────────────────────────────────
+        daily: pd.DataFrame | None = None
+        try:
+            from app.mcp_server.tools.market import fetch_candles
+            df, _ = fetch_candles(sym, "D", lookback, None)
+            if len(df) >= 60:
+                daily = df
+        except Exception:  # noqa: BLE001
+            pass
+        if daily is None:
+            from app.backtest.data import load_yahoo_daily
+            from datetime import date, timedelta
+            panel = load_yahoo_daily([sym], (date.today() - timedelta(days=lookback + 60)).isoformat(),
+                                     date.today().isoformat())
+            if sym in panel and len(panel[sym]) >= 60:
+                daily = panel[sym]
+        if daily is None or len(daily) < 60:
+            raise HTTPException(status_code=422, detail=f"Insufficient candle history for {sym}")
+
+        zones = indicators.demand_supply_zones(daily.tail(420), None)
+
+        # ── 15-min candles (last ~5 days) ──────────────────────────────────
+        intraday_15m = None
+        try:
+            from app.mcp_server.tools.market import fetch_candles as _fc
+            i15, _ = _fc(sym, "15", 7, None)   # 7 calendar days ≈ 5 trading days
+            if len(i15) >= 10:
+                intraday_15m = i15
+        except Exception:  # noqa: BLE001
+            pass
+
+        # ── events ─────────────────────────────────────────────────────────
+        events: list[dict] = []
+        try:
+            from app.mcp_server.tools import nse as nse_tools
+            ev = nse_tools.nse_company_events(sym, days=180)
+            if ev.get("status") == "ok":
+                events = ev.get("data") or []
+        except Exception:  # noqa: BLE001
+            pass
+
+        # ── quarterly fundamentals ─────────────────────────────────────────
+        fundamentals: dict | None = None
+        bank_kpis: dict | None = None
+        try:
+            from app.mcp_server.tools.fundamentals import quarterly_fundamentals
+            q = quarterly_fundamentals(sym)
+            if q.get("status") == "ok":
+                fundamentals = q["data"]
+            from app.store.db import kv_get
+            xbrl = (fundamentals or {}).get("latest_filing", {}).get("xbrl", {}) if fundamentals else {}
+            if xbrl.get("kpis"):
+                bank_kpis = xbrl["kpis"]
+        except Exception:  # noqa: BLE001
+            pass
+
+        html = plot_interactive_html(
+            symbol=sym, daily=daily, intraday_15m=intraday_15m,
+            zones=zones, events=events, fundamentals=fundamentals, bank_kpis=bank_kpis,
+        )
+        return Response(content=html, media_type="text/html",
+                        headers={"Cache-Control": "no-store",
+                                 "Content-Disposition": f'inline; filename="{sym}_interactive.html"'})
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/api/chart/{symbol}", tags=["charts"])
 async def get_chart(symbol: str, lookback: int = Query(default=160, ge=30, le=420),
                     capital: float = Query(default=100000.0), risk_pct: float = Query(default=1.0)) -> Response:
