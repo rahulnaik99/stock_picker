@@ -57,7 +57,7 @@ def test_dashboard_contains_agent_trace_viewer():
     response = client.get("/")
     assert response.status_code == 200
     assert "loadTraces" in response.text  # trace loader JS function
-    assert "/traces?symbol=" in response.text
+    assert "/agents?symbol=" in response.text  # traces now load via /agents endpoint
 
 
 def test_dashboard_has_no_llm_selector_and_points_to_model_config():

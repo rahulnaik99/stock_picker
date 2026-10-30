@@ -121,6 +121,7 @@ tr:hover td{background:var(--soft)}
 .run-mode-row{display:flex;gap:8px;align-items:center;margin:10px 0}
 /* ── score colors ───────────────────────────────────────────────────────── */
 .score-cell.positive{color:var(--up)}.score-cell.negative{color:var(--dn)}.score-cell.neutral{color:var(--mu)}
+.run-row.run-selected{border-left-color:var(--ac)!important;background:var(--acs)}
 /* ── stock list ─────────────────────────────────────────────────────────── */
 .stock-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer}
 .stock-row:hover{background:var(--soft)}
@@ -543,7 +544,13 @@ const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 const fmt = n => {const x=Number(n);if(!Number.isFinite(x))return'—';return x>=1e7?`${(x/1e7).toFixed(2)}Cr`:x>=1e5?`${(x/1e5).toFixed(1)}L`:x.toLocaleString('en-IN');}
 async function api(url,opts={}){
   const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});
-  if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||r.statusText);}
+  if(!r.ok){
+    const e=await r.json().catch(()=>({detail:r.statusText}));
+    // FastAPI 422 returns detail as an array of validation errors
+    const msg=Array.isArray(e.detail)?e.detail.map(x=>x.msg||JSON.stringify(x)).join('; '):
+              (typeof e.detail==='string'?e.detail:JSON.stringify(e.detail)||r.statusText);
+    throw new Error(msg);
+  }
   return r.json();
 }
 function notice(msg,err=true){const el=$('notice');if(!msg){el.style.display='none';return;}el.style.display='block';el.style.background=err?'var(--dns)':'var(--ups)';el.style.color=err?'var(--dn)':'var(--up)';el.textContent=msg;}
@@ -1055,35 +1062,89 @@ async function loadRuns(){
   try{const d=await api('/api/runs?limit=20');runs=d.runs||[];renderRuns();}catch{}
 }
 function renderRuns(){
-  $('runList').innerHTML=runs.length?runs.map(r=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line);font-size:12px">
-    <button class="lk" onclick="selectRun('${esc(r.run_id)}')" style="font-size:11px;text-align:left;flex:1">${esc(r.run_id.slice(-8))} · ${esc(r.scope||'')} · ${esc((r.created_at||'').slice(0,16))}</button>
-    <span class="badge ${r.status==='done'?'b-up':r.status==='running'?'b-am':'b-dn'}">${esc(r.status||'?')}</span>
+  $('runList').innerHTML=runs.length?runs.map(r=>`<div class="run-row" data-rid="${esc(r.run_id)}" style="display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line);font-size:12px;border-left:3px solid transparent">
+    <button class="lk" onclick="selectRun('${esc(r.run_id)}')" style="font-size:11px;text-align:left;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${esc(r.run_id)}">${esc(r.run_id.slice(-8))} · ${esc(r.scope||'')} · ${esc((r.created_at||'').slice(0,16))}</button>
+    <span class="badge ${r.status==='done'||r.status==='completed'?'b-up':r.status==='running'?'b-am':'b-dn'}">${esc(r.status||'?')}</span>
   </div>`).join(''):'<div class="empty hint">No runs yet.</div>';
 }
 async function selectRun(rid){
   activeRunId=rid;
-  try{const d=await api(`/api/runs/${rid}`);renderMatrix(d);renderResultsTable(d);}catch{}
+  // Highlight the selected run in the list
+  document.querySelectorAll('#runList .run-row').forEach(el=>el.classList.toggle('run-selected',el.dataset.rid===rid));
+  // Always show the resultsCard — traces should always be accessible
+  $('resultsCard').style.display='';
+  $('agentMatrix').innerHTML='<div class="hint" style="padding:16px"><span class="loading"></span> Loading agent data…</div>';
+  $('resultsTable').innerHTML='<div class="empty hint">Loading…</div>';
+  $('traceContent').innerHTML='';
+  $('traceSymbol').innerHTML='<option value="">Select symbol</option>';
+  $('loadTraces').disabled=true;
+  try{
+    // /agents returns ALL rows with {symbol, agent, status, score, reasoning, ...}
+    const agentData=await api(`/api/runs/${rid}/agents`);
+    renderMatrix(agentData);
+    // Also try to load ranked results (may 409 if run still in progress)
+    try{
+      const res=await api(`/api/runs/${rid}/results`);
+      renderResultsTable(res.results||[]);
+    }catch(e2){
+      // Not ready yet — show a status note
+      $('resultsTable').innerHTML=`<div class="empty hint">${esc(e2.message)}</div>`;
+    }
+  }catch(e){
+    $('agentMatrix').innerHTML=`<div class="empty hint">Could not load run data: ${esc(e.message)}</div>`;
+  }
 }
 function renderMatrix(d){
-  const rows=d.results||[];if(!rows.length){$('agentMatrix').innerHTML='<div class="empty hint">No agent data.</div>';return;}
-  const agents=['fundamental','industry','indicator','trader','rs_agent','quant_risk','promoter_intel','catalyst_quality','investment_trend','option_chain','decision_maker'];
-  const byKey={};rows.forEach(r=>{if(!byKey[r.symbol])byKey[r.symbol]={};byKey[r.symbol][r.agent]=r;});
+  // Accept both /agents {agents:[...]} and legacy {results:[...]} shapes
+  const rows=d.agents||d.results||[];
+  if(!rows.length){$('agentMatrix').innerHTML='<div class="empty hint">No agent data for this run yet.</div>';return;}
+  const AGENTS=['fundamental','industry','indicator','trader','rs_agent','quant_risk','promoter_intel','catalyst_quality','investment_trend','option_chain','decision_maker'];
+  const ABBR={'fundamental':'Fund','industry':'Indu','indicator':'Indi','trader':'Trad','rs_agent':'RS','quant_risk':'Risk','promoter_intel':'Prom','catalyst_quality':'Cat','investment_trend':'Trnd','option_chain':'OI','decision_maker':'DM'};
+  // Group by symbol → agent
+  const byKey={};
+  rows.forEach(r=>{if(!byKey[r.symbol])byKey[r.symbol]={};byKey[r.symbol][r.agent||r.agent_name]=r;});
   const syms=Object.keys(byKey);
-  const thead='<tr><th>Symbol</th>'+agents.map(a=>`<th title="${esc(a)}">${esc(a.slice(0,4))}</th>`).join('')+'<th>Score</th></tr>';
+  // Collect symbols for trace picker
+  updateTraceSymbols(syms);
+  const thead='<tr><th style="min-width:70px">Symbol</th>'+
+    AGENTS.map(a=>`<th title="${esc(a)}" style="font-size:9px;padding:4px 5px">${ABBR[a]||a.slice(0,4)}</th>`).join('')+
+    '<th>Final</th></tr>';
   const tbody=syms.map(sym=>{
-    const row=byKey[sym];const fin=rows.find(r=>r.symbol===sym&&r.agent==='decision_maker');
-    return`<tr><td class="sym">${esc(sym)}</td>`+agents.map(a=>{const ag=row[a];if(!ag)return'<td>—</td>';
-      const c=ag.status==='ok'?'c-ok':ag.status==='error'?'c-err':ag.status==='unavailable'?'c-skip':'c-wait';
-      return`<td class="${c}" title="${esc(a+': '+ag.status)}">${ag.score!=null?Number(ag.score).toFixed(1):(ag.status==='ok'?'ok':ag.status[0])}`;
-    }).join('')+`<td><b>${fin?.score!=null?Number(fin.score).toFixed(2):'—'}</b></td></tr>`;
+    const row=byKey[sym];
+    const dm=row['decision_maker'];
+    const finalScore=dm?.score??dm?.final_score;
+    return`<tr style="cursor:pointer" onclick="quickViewSymbol('${esc(sym)}')">
+      <td class="sym" style="font-weight:700">${esc(sym)}</td>`+
+      AGENTS.map(a=>{
+        const ag=row[a];
+        if(!ag)return'<td style="color:var(--mu);font-size:11px">—</td>';
+        const c=ag.status==='ok'?'c-ok':ag.status==='error'?'c-err':ag.status==='unavailable'?'c-skip':'c-wait';
+        const val=ag.score!=null?Number(ag.score).toFixed(1):(ag.status==='ok'?'✓':ag.status==='error'?'✗':'·');
+        return`<td class="${c}" title="${esc(a+': status='+ag.status+(ag.score!=null?' score='+Number(ag.score).toFixed(2):''))}" style="font-size:12px">${val}</td>`;
+      }).join('')+
+      `<td style="font-weight:800;font-size:13px">${finalScore!=null?Number(finalScore).toFixed(2):'—'}</td>
+    </tr>`;
   }).join('');
-  $('agentMatrix').innerHTML=`<table class="agent-matrix"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
-  $('matrixMeta').textContent=`${syms.length} stocks`;
+  $('agentMatrix').innerHTML=`<div class="matrix-wrap"><table class="agent-matrix"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>`;
+  $('matrixMeta').textContent=`${syms.length} stock${syms.length===1?'':'s'} · click row to load traces`;
+}
+function quickViewSymbol(sym){
+  // Set trace symbol picker and switch to Traces tab
+  $('traceSymbol').value=sym;
+  $('traceSymbol').dispatchEvent(new Event('change'));
+  // Switch to Traces tab
+  document.querySelectorAll('#resTab button').forEach(b=>{
+    b.classList.toggle('on',b.dataset.t==='traces');
+  });
+  $('resultsTable').style.display='none';
+  $('tracePanel').style.display='';
+  // Auto-load traces
+  if(activeRunId&&sym)$('loadTraces').click();
 }
 function renderResultsTable(d){
   const results=d.results||[];
-  if(!results.length){$('resultsCard').style.display='none';return;}
-  $('resultsCard').style.display='';
+  $('resultsCard').style.display='';  // always visible when a run is selected
+  if(!results.length){$('resultsTable').innerHTML='<div class="empty hint">No ranked results yet.</div>';return;}
   const grouped={};results.forEach(r=>{if(!grouped[r.symbol])grouped[r.symbol]={};grouped[r.symbol][r.agent]=r;});
   const dm_results=results.filter(r=>r.agent==='decision_maker').sort((a,b)=>(b.score||0)-(a.score||0));
   $('resultsTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>#</th><th>Symbol</th><th class="num">Score</th><th>Direction</th><th>Status</th><th>Completeness</th><th>Chart</th></tr></thead><tbody>
@@ -1110,9 +1171,38 @@ $('traceSymbol').addEventListener('change',()=>{const ok=!!(activeRunId&&$('trac
 $('showChart').onclick=()=>{const s=$('traceSymbol').value;if(s)window.open('/api/chart/'+encodeURIComponent(s)+'/interactive','_blank','noreferrer');};
 $('loadTraces').onclick=async()=>{
   const sym=$('traceSymbol').value;if(!sym||!activeRunId)return;
-  try{const d=await api(`/api/runs/${activeRunId}/traces?symbol=${sym}`);
-    $('traceContent').innerHTML=(d.agents||[]).map(a=>`<div class="card mt"><b>${esc(a.agent)}</b> <span class="badge ${a.status==='ok'?'b-up':'b-dn'}">${esc(a.status)}</span>${a.score!=null?` score ${Number(a.score).toFixed(2)}`:''}<pre style="white-space:pre-wrap;font-size:11px;margin-top:8px;color:var(--mu)">${esc((a.reasoning||'').slice(0,1200))}</pre></div>`).join('');
-  }catch(e){$('traceContent').innerHTML=`<div class="empty">${esc(e.message)}</div>`;}
+  $('traceContent').innerHTML='<div class="hint" style="padding:16px"><span class="loading"></span> Loading traces for '+esc(sym)+'…</div>';
+  try{
+    // Primary: DB-backed agent rows (always available for any completed run)
+    const d=await api(`/api/runs/${activeRunId}/agents?symbol=${encodeURIComponent(sym)}`);
+    const agentRows=d.agents||[];
+    if(!agentRows.length){
+      $('traceContent').innerHTML='<div class="empty hint">No agent data stored for '+esc(sym)+'</div>';
+      return;
+    }
+    const AGENT_LABELS={'fundamental':'Fundamental','industry':'Industry','indicator':'Indicator',
+      'trader':'Trader','rs_agent':'RS Agent','quant_risk':'Quant Risk',
+      'promoter_intel':'Promoter Intel','catalyst_quality':'Catalyst Quality',
+      'investment_trend':'Investment Trend','option_chain':'Option Chain','decision_maker':'Decision Maker'};
+    $('traceContent').innerHTML=agentRows.map(a=>{
+      const statusCls=a.status==='ok'?'b-up':a.status==='error'?'b-dn':'b-am';
+      const score=a.score!=null?`<span style="font-size:16px;font-weight:800;margin-left:8px">${Number(a.score).toFixed(2)}</span>`:'';
+      const reasoning=(a.reason||a.reasoning||'No reasoning stored').slice(0,2000);
+      const missing=a.missing?`<div style="font-size:11px;color:var(--dn);margin-top:4px">Missing: ${esc(a.missing)}</div>`:'';
+      const sources=a.sources?`<div style="font-size:11px;color:var(--mu);margin-top:4px">Sources: ${esc(a.sources)}</div>`:'';
+      return`<div class="card mt">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <b style="font-size:14px">${esc(AGENT_LABELS[a.agent]||a.agent)}</b>
+          <span class="badge ${statusCls}">${esc(a.status)}</span>${score}
+          ${a.provider?`<span class="hint" style="margin-left:auto;font-size:11px">${esc(a.model||'')} · ${esc(a.provider||'')}</span>`:''}
+        </div>
+        ${missing}${sources}
+        <div style="background:var(--soft);border-radius:8px;padding:12px;margin-top:8px;max-height:320px;overflow-y:auto">
+          <pre style="white-space:pre-wrap;font-size:12px;line-height:1.6;margin:0;color:var(--tx)">${esc(reasoning)}</pre>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){$('traceContent').innerHTML=`<div class="empty hint">Error: ${esc(e.message)}</div>`;}
 };
 $('exportMd').onclick=()=>{if(activeRunId)window.open(`/api/runs/${activeRunId}/export?fmt=md`,'_blank');};
 $('exportJson').onclick=()=>{if(activeRunId)window.open(`/api/runs/${activeRunId}/export?fmt=json`,'_blank');};
@@ -1145,7 +1235,7 @@ $('startRun').onclick=async()=>{
     activeRunId=d.run_id;runs.unshift(d);renderRuns();
     await selectRun(d.run_id);
     pollRun(d.run_id);
-  }catch(e){notice('Could not start run: '+e.message);}
+  }catch(e){notice('Could not start run: '+(e?.message||String(e)));}
   finally{btn.disabled=false;btn.textContent='▶ Start scoring run';}
 };
 
@@ -1155,7 +1245,15 @@ function pollRun(rid){
     try{
       const d=await api(`/api/runs/${rid}`);
       renderTokens(d.tokens||{},d.progress||{});
-      if(d.status==='done'||d.status==='failed'){clearInterval(_pollTimer);renderMatrix(d);renderResultsTable(d);loadRuns();}
+      if(d.status==='done'||d.status==='failed'){
+        clearInterval(_pollTimer);
+        // Load full agent data once complete
+        const agentData=await api(`/api/runs/${rid}/agents`).catch(()=>({agents:[]}));
+        renderMatrix(agentData);
+        const res=await api(`/api/runs/${rid}/results`).catch(()=>({results:[]}));
+        renderResultsTable(res.results||[]);
+        loadRuns();
+      }
     }catch{clearInterval(_pollTimer);}
   },2500);
 }
