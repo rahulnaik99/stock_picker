@@ -1,0 +1,21 @@
+# Nemotron-3.5-Bolt-E4B with a 16k context window for the stock-scoring pipeline.
+#
+# WHY YOU NEED THIS: Ollama's default context is 4096 tokens and Ollama IGNORES the per-call num_ctx that the app
+# sends over its OpenAI-compatible /v1 endpoint. So the only reliable way to raise the window is to bake it into the
+# model (here) or start the server with OLLAMA_CONTEXT_LENGTH. 4096 is too small for the agent prompts
+# (Fundamental ~4.8k, Industry ~3.7k) plus their JSON answer, which is why you see:
+#   400 "exceeds the available context size (4096 tokens)"  /  LengthFinishReasonError (total_tokens=4096).
+#
+# BUILD IT (one time):
+#   ollama create nemotron-e4b-16k -f app/config/ollama/nemotron-e4b-16k.Modelfile
+#   ollama show nemotron-e4b-16k --modelfile | grep num_ctx     # confirm it says 16384
+#
+# THEN point app/service/models/model_config.json at the model name "nemotron-e4b-16k" and restart the app.
+#
+# A 4B model at 16k context is light enough for a MacBook Air. Drop num_ctx to 8192 if you want less memory use
+# (8192 still fits the current prompts); do NOT leave it at the 4096 default.
+
+FROM hf.co/abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF:Q5_K_M
+
+PARAMETER num_ctx 16384
+PARAMETER num_predict 2000

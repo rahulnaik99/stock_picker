@@ -1,0 +1,20 @@
+{
+  "version": "v2-10agents",
+  "weights": {
+    "fundamental":       0.22,
+    "industry":          0.10,
+    "indicator":         0.14,
+    "trader":            0.13,
+    "rs_agent":          0.08,
+    "quant_risk":        0.04,
+    "promoter_intel":    0.07,
+    "catalyst_quality":  0.07,
+    "investment_trend":  0.09,
+    "option_chain":      0.06
+  },
+  "required": ["fundamental", "industry", "indicator"],
+  "min_data_completeness": 0.70,
+  "score_discrepancy_threshold": 2.0,
+  "overextended_blocks_entry": true,
+  "min_final_score_for_entry": 2.0
+}

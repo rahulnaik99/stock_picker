@@ -1,0 +1,20 @@
+langchain-core>=1.0
+langchain-openai>=1.0       # OpenAI API
+mcp>=1.9,<2         # tested on 1.30; mcp 2.x changes the stdio client and breaks tests/mcp_mode=stdio
+pydantic>=2.6
+pydantic-settings>=2.2
+httpx>=0.27
+requests>=2.31
+pandas>=2.2,<3.1
+numpy>=1.26
+openpyxl>=3.1
+matplotlib>=3.7            # app.viz technical charts (demand/supply zones + bull/bear trade levels)
+yfinance>=0.2.40
+fyers-apiv3>=3.1          # official FYERS v3 SDK (candles + option chain); market data has no fallback
+feedparser>=6.0
+filelock>=3.13
+pytest>=8
+pytest-asyncio>=0.23
+fastapi>=0.115
+uvicorn[standard]>=0.30
+plotly>=5.0

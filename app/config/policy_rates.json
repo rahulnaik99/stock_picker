@@ -1,0 +1,7 @@
+{
+  "_note": "RBI policy rates are not on a stable machine-readable endpoint. Keep this file updated from the latest RBI MPC press release. The rbi_policy tool reports this value together with the age of the record and the newest RBI press releases. Leave null until you have verified it.",
+  "rbi_repo_rate_percent": null,
+  "as_of": null,
+  "source_url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx",
+  "stance": null
+}
