@@ -89,6 +89,47 @@ def reset_daily_caches() -> None:
         con.execute("DELETE FROM kv WHERE ns IN ('option_chain', 'industry_score')")
 
 
+def prune_old_data(
+    news_days: int = 90,
+    events_days: int = 180,
+    runs_keep: int = 100,
+    oi_days: int = 60,
+) -> dict[str, int]:
+    """Delete old rows that accumulate unboundedly. Safe to call anytime."""
+    from datetime import timedelta
+    cutoff_news   = (now_ist() - timedelta(days=news_days)).date().isoformat()
+    cutoff_events = (now_ist() - timedelta(days=events_days)).isoformat()
+    cutoff_oi     = (now_ist() - timedelta(days=oi_days)).isoformat()
+    deleted: dict[str, int] = {}
+    with connect() as con:
+        deleted["news"]        = con.execute("DELETE FROM news WHERE published_at < ?", (cutoff_news,)).rowcount
+        deleted["events"]      = con.execute("DELETE FROM company_events WHERE available_at < ?", (cutoff_events,)).rowcount
+        deleted["oi_snapshots"] = con.execute("DELETE FROM oi_snapshots WHERE captured_at < ?", (cutoff_oi,)).rowcount
+        deleted["run_agent_io"] = con.execute(
+            "DELETE FROM run_agent_io WHERE run_id NOT IN "
+            "(SELECT run_id FROM runs ORDER BY created_at DESC LIMIT ?)", (runs_keep,)).rowcount
+        deleted["kv_yf_fund"]  = con.execute(
+            "DELETE FROM kv WHERE ns='yf_fund' AND datetime(created_at) < datetime('now','-7 days')").rowcount
+    return deleted
+
+
+def db_stats() -> dict[str, Any]:
+    """Row counts and estimated size for every table — used by the Data viewer."""
+    tables = ["fundamentals_q", "news", "company_events", "fii_dii_daily",
+              "oi_snapshots", "runs", "run_agent_io", "kv", "refresh_log", "watchlists"]
+    stats: dict[str, Any] = {}
+    with connect() as con:
+        for t in tables:
+            row = con.execute(f"SELECT COUNT(*) AS n FROM {t}").fetchone()  # noqa: S608
+            stats[t] = {"rows": row["n"] if row else 0}
+        # rough page size estimate
+        page = con.execute("PRAGMA page_size").fetchone()
+        page_count = con.execute("PRAGMA page_count").fetchone()
+        if page and page_count:
+            stats["_db_size_bytes"] = page[0] * page_count[0]
+    return stats
+
+
 # ---- small JSON cache ----------------------------------------------------------------------------
 def kv_get(ns: str, key: str) -> Any | None:
     with connect() as con:

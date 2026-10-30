@@ -112,6 +112,16 @@ td.reason{white-space:normal;min-width:240px;color:#45506a}
 .model-badge{font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:var(--accent-weak);color:#1e40af;border:1px solid #c7d7fb;white-space:nowrap}
 .model-badge.unavail{background:var(--gray-weak);color:#67748c;border-color:var(--line)}
 .score-cell.pos{color:#16a34a}.score-cell.neg{color:#dc2626}.score-cell.neu{color:var(--muted)}
+.tabnav{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--bg)}
+.tablink{padding:9px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
+.tablink.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tablink:hover:not(.active){color:var(--text)}
+.ds-table{width:100%;border-collapse:collapse;font-size:12px}
+.ds-table th{padding:7px 10px;border-bottom:2px solid var(--line);text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;background:var(--bg);z-index:1}
+.ds-table td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-table tr:hover td{background:var(--panel2)}
+.ds-stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:11px}
+.ds-stat b{font-size:15px;display:block}
 .tok-hi b{color:var(--accent)}
 th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -120,6 +130,8 @@ th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
 </style></head>
 <body><main class="wrap">
 <header class="top"><div class="brand"><div class="logo">↗</div><div><div class="eyebrow">Research workspace</div><h1>Stock Scoring Control Center</h1><div class="sub">Select your universe, launch a run, and watch every agent work in real time.</div></div></div><div class="status" id="apiStatus"><span class="dot"></span>Checking API…</div></header>
+<nav class="tabnav"><button class="tablink active" id="tabScoring" onclick="switchTab('scoring')">Scoring</button><button class="tablink" id="tabData" onclick="switchTab('data')">🗄 Data Store</button></nav>
+<div id="scoringView">
 <div class="layout">
 <section class="panel"><div class="panel-head"><div><h2>Build a scoring run</h2><div class="hint">Choose individual stocks or filter the universe.</div></div><span class="badge" id="universeCount">Loading</span></div>
 <div class="toolbar"><input id="search" class="field search" placeholder="Search symbol or company…" autocomplete="off"><select id="sector" class="field select"><option value="">All sub-sectors</option></select></div>
@@ -206,6 +218,49 @@ th.decision-sep,td.decision-sep{border-left:2px solid var(--accent);}
   </div>
 </div>
 <button id="wlToggleBtn" onclick="toggleWatchlist()" title="My Watchlists" style="position:fixed;top:50%;right:0;transform:translateY(-50%) rotate(-90deg);transform-origin:center;background:var(--accent);color:#fff;border:none;padding:6px 14px;border-radius:8px 8px 0 0;font-size:12px;cursor:pointer;z-index:901">⭐ Lists</button>
+</div><!-- /scoringView -->
+
+<!-- ═══════════════════════════════════════════════════════ DATA STORE TAB ══ -->
+<div id="dataView" style="display:none;padding:16px 20px">
+
+  <!-- top bar: stats + prune -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div id="dbStatsBar" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="hint" style="font-size:11px">Prune older than:</span>
+      <select id="pruneNewsDays" class="field" style="width:90px;font-size:11px;padding:4px"><option value="30">30d news</option><option value="60">60d news</option><option value="90" selected>90d news</option><option value="180">180d news</option></select>
+      <select id="pruneRunsKeep" class="field" style="width:110px;font-size:11px;padding:4px"><option value="20">keep 20 runs</option><option value="50">keep 50 runs</option><option value="100" selected>keep 100 runs</option><option value="200">keep 200 runs</option></select>
+      <button class="secondary" id="pruneBtn" onclick="runPrune()" style="font-size:11px;padding:6px 12px">🗑 Prune DB</button>
+    </div>
+  </div>
+
+  <!-- subtab nav -->
+  <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:0">
+    <button class="tablink active" id="dst-fundamentals" onclick="switchDataTab('fundamentals')">📊 Quarterly Results</button>
+    <button class="tablink" id="dst-news" onclick="switchDataTab('news')">📰 News</button>
+    <button class="tablink" id="dst-events" onclick="switchDataTab('events')">📋 Events</button>
+    <button class="tablink" id="dst-fii" onclick="switchDataTab('fii')">💰 FII / DII</button>
+    <button class="tablink" id="dst-oi" onclick="switchDataTab('oi')">📈 OI Snapshots</button>
+    <button class="tablink" id="dst-runs" onclick="switchDataTab('runs')">▶ Runs</button>
+    <button class="tablink" id="dst-agentio" onclick="switchDataTab('agentio')">🤖 Agent I/O</button>
+  </div>
+
+  <!-- search row (shared) -->
+  <div id="dataSearchRow" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <input id="dsSymbol" class="field" placeholder="Symbol filter…" style="width:120px;font-size:12px" oninput="loadDataTab()">
+    <input id="dsScope"  class="field" placeholder="Scope / query filter…" style="width:180px;font-size:12px;display:none" oninput="loadDataTab()">
+    <input id="dsRunId"  class="field" placeholder="Run ID…" style="width:200px;font-size:12px;display:none" oninput="loadDataTab()">
+    <select id="dsDays" class="field" style="width:100px;font-size:12px" onchange="loadDataTab()">
+      <option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">1 year</option>
+    </select>
+    <span id="dsCount" class="hint" style="align-self:center;font-size:11px;margin-left:4px"></span>
+  </div>
+
+  <div id="dataTableWrap" style="overflow-x:auto;max-height:calc(100vh - 240px);overflow-y:auto">
+    <div class="empty hint">Select a subtab above.</div>
+  </div>
+
+</div><!-- /dataView -->
 
 </main>
 <script>
@@ -420,6 +475,114 @@ function runFromWatchlist(){
   });
 }
 // ── END WATCHLISTS / TOOL HEALTH ─────────────────────────────────────────
+
+// ── TAB SWITCHER (Scoring / Data) ────────────────────────────────────────
+function switchTab(t){
+  $('scoringView').style.display=t==='scoring'?'':'none';
+  $('dataView').style.display=t==='data'?'':'none';
+  $('tabScoring').classList.toggle('active',t==='scoring');
+  $('tabData').classList.toggle('active',t==='data');
+  if(t==='data'){loadDbStats();loadDataTab();}
+}
+
+// ── DATA STORE TAB ────────────────────────────────────────────────────────
+let _activeDataTab='fundamentals';
+
+async function loadDbStats(){
+  try{
+    const d=await api('/api/data/stats');
+    const fmtRows=(n)=>n>=1e6?`${(n/1e6).toFixed(1)}M`:(n>=1e3?`${(n/1e3).toFixed(1)}k`:String(n));
+    const fmtSize=(b)=>b>=1e9?`${(b/1e9).toFixed(1)} GB`:(b>=1e6?`${(b/1e6).toFixed(0)} MB`:(b>=1e3?`${(b/1e3).toFixed(0)} KB`:'< 1 KB'));
+    const labels={fundamentals_q:'Fundamentals',news:'News',company_events:'Events',fii_dii_daily:'FII/DII',oi_snapshots:'OI Snapshots',runs:'Runs',run_agent_io:'Agent I/O',kv:'KV cache',watchlists:'Watchlists'};
+    $('dbStatsBar').innerHTML=Object.entries(labels).map(([k,l])=>`<div class="ds-stat"><small>${l}</small><b>${fmtRows(d[k]?.rows||0)}</b></div>`).join('')
+      +(d._db_size_bytes?`<div class="ds-stat" style="color:var(--accent)"><small>DB size</small><b>${fmtSize(d._db_size_bytes)}</b></div>`:'');
+  }catch(e){}
+}
+
+function switchDataTab(tab){
+  _activeDataTab=tab;
+  document.querySelectorAll('[id^="dst-"]').forEach(b=>b.classList.remove('active'));
+  const el=$(`dst-${tab}`); if(el) el.classList.add('active');
+  // show/hide filters
+  const showSym=['fundamentals','events','oi','agentio'].includes(tab);
+  const showScope=['news'].includes(tab);
+  const showRunId=['agentio'].includes(tab);
+  $('dsSymbol').style.display=showSym?'':'none';
+  $('dsScope').style.display=showScope?'':'none';
+  $('dsRunId').style.display=showRunId?'':'none';
+  $('dsDays').style.display=(['fii','oi','news','events'].includes(tab))?'':'none';
+  loadDataTab();
+}
+
+async function loadDataTab(){
+  const tab=_activeDataTab;
+  const sym=($('dsSymbol').value||'').trim().toUpperCase();
+  const scope=($('dsScope').value||'').trim();
+  const runId=($('dsRunId').value||'').trim();
+  const days=parseInt($('dsDays').value)||30;
+  $('dataTableWrap').innerHTML='<div class="hint" style="padding:20px">Loading…</div>';
+  try{
+    let d, cols, rows;
+    if(tab==='fundamentals'){
+      d=await api(`/api/data/fundamentals?limit=300${sym?'&symbol='+sym:''}`);
+      cols=[['symbol','Symbol'],['period_end','Period'],['basis','Basis'],['source','Source'],['revenue','Revenue cr'],['op_profit','PPOP cr'],['pbt','PBT cr'],['pat','PAT cr'],['eps','EPS'],['reported_on','Reported']];
+    }else if(tab==='news'){
+      d=await api(`/api/data/news?days=${days}&limit=300${scope?'&scope='+encodeURIComponent(scope):''}`);
+      cols=[['scope','Scope'],['title','Headline'],['publisher','Publisher'],['published_at','Published']];
+    }else if(tab==='events'){
+      d=await api(`/api/data/events?days=${days}&limit=300${sym?'&symbol='+sym:''}`);
+      cols=[['symbol','Symbol'],['event_date','Date'],['event_type','Type'],['event_summary','Summary'],['announcement_date','Announced']];
+    }else if(tab==='fii'){
+      d=await api(`/api/data/fii_dii?days=${days}`);
+      cols=[['day','Day'],['category','Category'],['buy_cr','Buy cr'],['sell_cr','Sell cr'],['net_cr','Net cr'],['fetched_at','Fetched']];
+    }else if(tab==='oi'){
+      d=await api(`/api/data/oi_snapshots?days=${days}&limit=300${sym?'&symbol='+sym:''}`);
+      cols=[['symbol','Symbol'],['captured_at','Captured'],['ltp','LTP'],['call_oi','Call OI'],['put_oi','Put OI'],['pcr','PCR'],['max_pain','Max Pain']];
+    }else if(tab==='runs'){
+      d=await api('/api/data/runs?limit=100');
+      cols=[['run_id','Run ID'],['as_of','As-of'],['created_at','Created'],['n_stocks','Stocks'],['scope','Scope']];
+    }else if(tab==='agentio'){
+      const qs=`?limit=200${runId?'&run_id='+encodeURIComponent(runId):''}${sym?'&symbol='+sym:''}`;
+      d=await api(`/api/data/agent_io${qs}`);
+      cols=[['run_id','Run ID'],['symbol','Symbol'],['agent','Agent'],['status','Status'],['score','Score'],['confidence','Conf'],['provider','Provider'],['model','Model'],['reason','Reasoning'],['created_at','Created']];
+    }
+    rows=d.rows||[];
+    $('dsCount').textContent=`${rows.length} rows`;
+    if(!rows.length){$('dataTableWrap').innerHTML='<div class="empty hint" style="padding:20px">No data for this filter.</div>';return;}
+    const thead='<tr>'+cols.map(([,h])=>`<th>${h}</th>`).join('')+'</tr>';
+    const tbody=rows.map(r=>'<tr>'+cols.map(([k])=>{
+      let v=r[k];
+      if(v==null)return'<td>—</td>';
+      if(typeof v==='number'){
+        if(k==='score') return`<td class="score-cell ${v>0?'pos':v<0?'neg':'neu'}">${v.toFixed(2)}</td>`;
+        if(k==='confidence') return`<td>${(v*100).toFixed(0)}%</td>`;
+        if(['call_oi','put_oi','buy_cr','sell_cr','net_cr','revenue','op_profit','pbt','pat'].includes(k))
+          return`<td style="text-align:right">${Number(v).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>`;
+        return`<td style="text-align:right">${Number.isInteger(v)?v:Number(v).toFixed(2)}</td>`;
+      }
+      const s=String(v);
+      // truncate long strings; show full on hover
+      const disp=s.length>60?s.slice(0,60)+'…':s;
+      return`<td title="${escapeHtml(s)}">${escapeHtml(disp)}</td>`;
+    }).join('')+'</tr>').join('');
+    $('dataTableWrap').innerHTML=`<table class="ds-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  }catch(e){$('dataTableWrap').innerHTML=`<div class="empty hint" style="padding:20px">Error: ${escapeHtml(e.message)}</div>`;}
+}
+
+async function runPrune(){
+  const news=parseInt($('pruneNewsDays').value)||90;
+  const runs=parseInt($('pruneRunsKeep').value)||100;
+  if(!confirm(`Prune:\n• News older than ${news} days\n• Events older than 180 days\n• OI snapshots older than 60 days\n• Agent I/O beyond last ${runs} runs\n\nThis cannot be undone.`)) return;
+  $('pruneBtn').disabled=true;$('pruneBtn').textContent='Pruning…';
+  try{
+    const d=await api(`/api/admin/prune?news_days=${news}&runs_keep=${runs}`,{method:'POST'});
+    const total=Object.values(d.pruned||{}).reduce((a,n)=>a+n,0);
+    alert(`Pruned ${total} rows total.\n${JSON.stringify(d.pruned,null,2)}`);
+    loadDbStats(); loadDataTab();
+  }catch(e){alert('Prune failed: '+e.message);}
+  finally{$('pruneBtn').disabled=false;$('pruneBtn').textContent='🗑 Prune DB';}
+}
+// ── END DATA STORE TAB ────────────────────────────────────────────────────
 
 (async()=>{Promise.all([checkHealth(),loadUniverse(),loadRuns(),loadModels()])})();
 </script></body></html>

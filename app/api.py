@@ -474,6 +474,145 @@ async def get_run_traces(run_id: str, symbol: str = Query(..., min_length=1, max
 #  WATCHLISTS — persistent named stock lists (favourites, themes, etc.)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DATA VIEWER — browse every SQLite table
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/data/stats", tags=["data"])
+async def data_stats() -> dict[str, Any]:
+    """Row counts + estimated DB size for every table."""
+    from app.store.db import db_stats
+    return db_stats()
+
+
+@app.get("/api/data/fundamentals", tags=["data"])
+async def data_fundamentals(symbol: str | None = None, limit: int = Query(default=200, le=1000)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    q = "SELECT symbol,period_end,basis,source,revenue,op_profit,op_kind,pbt,pat,eps,reported_on FROM fundamentals_q"
+    args: list = []
+    if symbol:
+        q += " WHERE symbol=?"; args.append(symbol.upper().strip())
+    q += " ORDER BY symbol,period_end DESC LIMIT ?"
+    args.append(limit)
+    with _db() as con:
+        rows = [dict(r) for r in con.execute(q, args).fetchall()]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/data/news", tags=["data"])
+async def data_news(scope: str | None = None, days: int = Query(default=30, le=365),
+                    limit: int = Query(default=200, le=1000)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    from datetime import timedelta
+    cutoff = (datetime.now().astimezone() - timedelta(days=days)).isoformat(timespec="seconds")
+    q = "SELECT scope,title,publisher,published_at,url FROM news WHERE published_at >= ?"
+    args: list = [cutoff]
+    if scope:
+        q += " AND scope LIKE ?"; args.append(f"%{scope}%")
+    q += " ORDER BY published_at DESC LIMIT ?"; args.append(limit)
+    with _db() as con:
+        rows = [dict(r) for r in con.execute(q, args).fetchall()]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/data/events", tags=["data"])
+async def data_events(symbol: str | None = None, event_type: str | None = None,
+                      days: int = Query(default=90, le=365), limit: int = Query(default=200, le=1000)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    from datetime import timedelta
+    cutoff = (datetime.now().astimezone() - timedelta(days=days)).isoformat(timespec="seconds")
+    q = "SELECT event_id,symbol,event_type,event_date,announcement_date,available_at,payload FROM company_events WHERE available_at >= ?"
+    args: list = [cutoff]
+    if symbol:
+        q += " AND symbol=?"; args.append(symbol.upper().strip())
+    if event_type:
+        q += " AND event_type=?"; args.append(event_type)
+    q += " ORDER BY available_at DESC LIMIT ?"; args.append(limit)
+    with _db() as con:
+        rows = []
+        for r in con.execute(q, args).fetchall():
+            d = dict(r)
+            try:
+                import json as _j
+                p = _j.loads(d.pop("payload", "{}") or "{}")
+                d["event_summary"] = p.get("event_summary", "")[:120]
+            except Exception:  # noqa: BLE001
+                d["event_summary"] = ""
+            rows.append(d)
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/data/fii_dii", tags=["data"])
+async def data_fii_dii(days: int = Query(default=30, le=365)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    from datetime import timedelta
+    cutoff = (datetime.now().astimezone() - timedelta(days=days)).date().isoformat()
+    with _db() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT day,category,buy_cr,sell_cr,net_cr,fetched_at FROM fii_dii_daily "
+            "WHERE day >= ? ORDER BY day DESC, category", (cutoff,)).fetchall()]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/data/oi_snapshots", tags=["data"])
+async def data_oi_snapshots(symbol: str | None = None, days: int = Query(default=30, le=180),
+                             limit: int = Query(default=200, le=1000)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    from datetime import timedelta
+    cutoff = (datetime.now().astimezone() - timedelta(days=days)).isoformat(timespec="seconds")
+    q = "SELECT symbol,captured_at,call_oi,put_oi,pcr,ltp,max_pain FROM oi_snapshots WHERE captured_at >= ?"
+    args: list = [cutoff]
+    if symbol:
+        q += " AND symbol=?"; args.append(symbol.upper().strip())
+    q += " ORDER BY captured_at DESC LIMIT ?"; args.append(limit)
+    with _db() as con:
+        rows = [dict(r) for r in con.execute(q, args).fetchall()]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/data/runs", tags=["data"])
+async def data_runs(limit: int = Query(default=50, le=200)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    with _db() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT run_id,as_of,created_at,n_stocks,scope FROM runs ORDER BY created_at DESC LIMIT ?",
+            (limit,)).fetchall()]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/data/agent_io", tags=["data"])
+async def data_agent_io(run_id: str | None = None, symbol: str | None = None,
+                        agent: str | None = None, limit: int = Query(default=100, le=500)) -> dict[str, Any]:
+    from app.store.db import connect as _db
+    q = "SELECT run_id,symbol,agent,status,score,confidence,provider,model,reason,missing,note,created_at FROM run_agent_io WHERE 1=1"
+    args: list = []
+    if run_id:
+        q += " AND run_id=?"; args.append(run_id)
+    if symbol:
+        q += " AND symbol=?"; args.append(symbol.upper().strip())
+    if agent:
+        q += " AND agent=?"; args.append(agent)
+    q += " ORDER BY created_at DESC LIMIT ?"; args.append(limit)
+    with _db() as con:
+        rows = [dict(r) for r in con.execute(q, args).fetchall()]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.post("/api/admin/prune", tags=["data"])
+async def admin_prune(
+    news_days: int = Query(default=90),
+    events_days: int = Query(default=180),
+    runs_keep: int = Query(default=100),
+    oi_days: int = Query(default=60),
+) -> dict[str, Any]:
+    """Delete old data to keep the DB lean. Returns deleted row counts per table."""
+    from app.store.db import prune_old_data
+    deleted = prune_old_data(news_days=news_days, events_days=events_days,
+                              runs_keep=runs_keep, oi_days=oi_days)
+    return {"pruned": deleted}
+
+
 @app.get("/api/watchlists", tags=["watchlists"])
 async def get_watchlists() -> dict[str, Any]:
     """Return all watchlists as {list_name: [symbol, …]}."""
