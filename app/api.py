@@ -77,6 +77,10 @@ class RunRequest(BaseModel):
         default=None, ge=30, le=1800,
         description="Per-agent LLM call timeout in seconds. Override LLM_TIMEOUT_SECONDS for slow/large models."
     )
+    run_mode: Literal["bulk", "deep_dive"] = Field(
+        default="bulk",
+        description="bulk = nemotron-bolt everywhere (fast, reliable). deep_dive = mixed config (qwen3 for heavy agents) — uses model_config.mixed.json if present.",
+    )
 
     @field_validator("symbols")
     @classmethod
@@ -121,6 +125,7 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
     original_provider = s.llm_force_provider
     original_model = s.llm_force_model
     original_timeout = s.llm_timeout_seconds
+    original_config_path = s.llm_config_path
     original_force_refresh = s.force_refresh
     original_force_refresh_env = os.environ.get("FORCE_REFRESH")
     state["status"] = "running"
@@ -139,6 +144,18 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
             s.llm_force_model = (request.llm_model.strip() if request.llm_model else None)
         if request.llm_timeout:
             s.llm_timeout_seconds = request.llm_timeout
+        # deep_dive mode: swap to mixed config (qwen3 + bolt + nano) if available
+        if request.run_mode == "deep_dive" and not request.stub:
+            from pathlib import Path as _P
+            from app.service.models.llm_factory import CONFIG_PATH as _CFG
+            mixed = _P(_CFG).parent / "model_config.mixed.json"
+            if mixed.exists():
+                s.llm_config_path = str(mixed)
+                state["run_mode_effective"] = "deep_dive (model_config.mixed.json)"
+            else:
+                state["run_mode_effective"] = "deep_dive requested but model_config.mixed.json not found — using default"
+        else:
+            state["run_mode_effective"] = "bulk"
         if request.force_refresh:
             os.environ["FORCE_REFRESH"] = "1"
             s.force_refresh = True
@@ -177,6 +194,7 @@ async def _execute_run(run_id: str, request: RunRequest, rows: list[dict[str, st
         s.llm_force_provider = original_provider
         s.llm_force_model = original_model
         s.llm_timeout_seconds = original_timeout
+        s.llm_config_path = original_config_path
         s.force_refresh = original_force_refresh
         if original_force_refresh_env is None:
             os.environ.pop("FORCE_REFRESH", None)
@@ -195,6 +213,84 @@ async def home() -> FileResponse:
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "stock-scoring-api"}
+
+
+@app.get("/api/health/tools", tags=["system"])
+async def tool_health() -> dict[str, Any]:
+    """Probe every external data source and return green/red status per tool.
+    Used by the UI tool-health panel. Each probe has a short timeout so the response is fast."""
+    import httpx
+    s = get_settings()
+    results: dict[str, Any] = {}
+
+    async def probe(name: str, coro) -> None:
+        try:
+            status, note = await coro
+            results[name] = {"status": status, "note": note}
+        except Exception as exc:  # noqa: BLE001
+            results[name] = {"status": "red", "note": str(exc)[:120]}
+
+    async def _http(url: str, timeout: float = 4.0, headers: dict | None = None) -> tuple[str, str]:
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.get(url, headers=headers or {})
+            return ("green" if r.status_code < 400 else "red"), f"HTTP {r.status_code}"
+
+    async def _fyers() -> tuple[str, str]:
+        if not (s.fyers_app_id and s.fyers_access_token):
+            return "yellow", "FYERS_APP_ID / FYERS_ACCESS_TOKEN not set"
+        from app.mcp_server.tools.market import _fyers_client
+        try:
+            _fyers_client()
+            return "green", "credentials present"
+        except Exception as e:  # noqa: BLE001
+            return "red", str(e)[:80]
+
+    async def _ollama() -> tuple[str, str]:
+        raw = (s.ollama_base_url or "http://localhost:11434").rstrip("/")
+        if raw.endswith("/v1"):
+            raw = raw[:-3]
+        return await _http(f"{raw}/api/tags")
+
+    async def _yahoo() -> tuple[str, str]:
+        return await _http("https://query1.finance.yahoo.com/v8/finance/chart/^NSEI?interval=1d&range=5d", timeout=5.0)
+
+    async def _nse() -> tuple[str, str]:
+        return await _http("https://www.nseindia.com", timeout=5.0,
+                           headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
+
+    async def _rbi() -> tuple[str, str]:
+        return await _http("https://rbi.org.in/pressreleases_rss.xml", timeout=5.0)
+
+    async def _fred() -> tuple[str, str]:
+        if not s.fred_api_key:
+            return "yellow", "FRED_API_KEY not set (macro rates unavailable)"
+        return await _http(f"https://api.stlouisfed.org/fred/series/observations?series_id=DFF&api_key={s.fred_api_key}&limit=1&file_type=json", timeout=5.0)
+
+    async def _indianapi() -> tuple[str, str]:
+        if not s.indianapi_key:
+            return "yellow", "INDIANAPI_KEY not set (premium news unavailable)"
+        return await _http("https://stock.indianapi.in/news", timeout=5.0,
+                           headers={"x-api-key": s.indianapi_key})
+
+    async def _olmx() -> tuple[str, str]:
+        if not s.olmx_base_url:
+            return "yellow", "OLMX_BASE_URL not set"
+        return await _http(f"{s.olmx_base_url.rstrip('/')}/models", timeout=3.0,
+                           headers={"Authorization": f"Bearer {s.olmx_api_key}"} if s.olmx_api_key else {})
+
+    await asyncio.gather(
+        probe("Ollama (LLM)", _ollama()),
+        probe("FYERS (candles)", _fyers()),
+        probe("NSE (events/deals)", _nse()),
+        probe("Yahoo Finance (index/macro)", _yahoo()),
+        probe("RBI RSS (policy)", _rbi()),
+        probe("FRED (US rates)", _fred()),
+        probe("IndianAPI (premium news)", _indianapi()),
+        probe("MLX / OLMX", _olmx()),
+    )
+    total = len(results)
+    green = sum(1 for v in results.values() if v["status"] == "green")
+    return {"tools": results, "summary": f"{green}/{total} reachable"}
 
 
 @app.get("/api/universe", tags=["universe"])
@@ -372,6 +468,48 @@ async def get_run_traces(run_id: str, symbol: str = Query(..., min_length=1, max
             continue
         traces.append({"agent": path.stem[len(safe_symbol) + 1:], "file": path.name, **payload})
     return {"run_id": run_id, "symbol": safe_symbol, "count": len(traces), "traces": traces}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  WATCHLISTS — persistent named stock lists (favourites, themes, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/watchlists", tags=["watchlists"])
+async def get_watchlists() -> dict[str, Any]:
+    """Return all watchlists as {list_name: [symbol, …]}."""
+    from app.store.db import connect as _db
+    with _db() as con:
+        rows = con.execute("SELECT list_name, symbol FROM watchlists ORDER BY list_name, added_at").fetchall()
+    out: dict[str, list[str]] = {}
+    for name, sym in rows:
+        out.setdefault(name, []).append(sym)
+    return {"watchlists": out}
+
+
+@app.post("/api/watchlists/{list_name}", tags=["watchlists"], status_code=201)
+async def add_to_watchlist(list_name: str, body: dict = None) -> dict[str, Any]:
+    """Add one or more symbols to a named watchlist. Body: {\"symbols\": [\"SBIN\",\"CANBK\"]}"""
+    from app.store.db import connect as _db
+    symbols = ([s.strip().upper() for s in (body or {}).get("symbols", [])] if body else [])
+    if not symbols:
+        raise HTTPException(status_code=400, detail="Provide {\"symbols\": [\"SYMBOL1\",…]}")
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    with _db() as con:
+        for sym in symbols:
+            con.execute("INSERT OR IGNORE INTO watchlists VALUES (?,?,?)", (list_name, sym, now))
+    return {"list_name": list_name, "added": symbols}
+
+
+@app.delete("/api/watchlists/{list_name}", tags=["watchlists"])
+async def delete_from_watchlist(list_name: str, symbol: str | None = None) -> dict[str, Any]:
+    """Remove a symbol from a list, or delete the entire list if symbol is omitted."""
+    from app.store.db import connect as _db
+    with _db() as con:
+        if symbol:
+            con.execute("DELETE FROM watchlists WHERE list_name=? AND symbol=?", (list_name, symbol.upper()))
+            return {"deleted": symbol, "from": list_name}
+        con.execute("DELETE FROM watchlists WHERE list_name=?", (list_name,))
+        return {"deleted_list": list_name}
 
 
 @app.get("/api/models", tags=["config"])

@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS run_agent_io (
   run_id TEXT, symbol TEXT, agent TEXT, status TEXT, score REAL, confidence REAL, reason TEXT,
   sources TEXT, context_used TEXT, missing TEXT, extra TEXT, provider TEXT, model TEXT, note TEXT, created_at TEXT,
   PRIMARY KEY (run_id, symbol, agent));
+CREATE TABLE IF NOT EXISTS watchlists (
+  list_name TEXT NOT NULL,
+  symbol    TEXT NOT NULL,
+  added_at  TEXT NOT NULL,
+  PRIMARY KEY (list_name, symbol));
 """
 
 

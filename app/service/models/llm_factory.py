@@ -39,7 +39,9 @@ class ModelSpec:
 
 
 def load_model_config(path: Path | None = None) -> dict[str, Any]:
-    return json.loads((path or CONFIG_PATH).read_text(encoding="utf-8"))
+    # explicit path arg > run-level override in settings > default config file
+    effective = path or (Path(get_settings().llm_config_path) if get_settings().llm_config_path else None) or CONFIG_PATH
+    return json.loads(Path(effective).read_text(encoding="utf-8"))
 
 
 def resolve_spec(agent: str, config: dict[str, Any] | None = None, settings: Settings | None = None) -> ModelSpec:

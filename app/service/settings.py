@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     llm_json_object: bool = True
     llm_force_provider: str = ""  # overrides provider in model_config.json for a run
     llm_force_model: str = ""  # optional model ID override for a run
+    llm_config_path: str = ""  # if set, uses this model_config JSON instead of the default (deep-dive mode)
     openai_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
     olmx_base_url: str = "http://127.0.0.1:8008/v1"
